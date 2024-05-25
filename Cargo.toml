@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 description = "Solution to Wundernut vol. 13"
 readme = "README.md"
+license = "MIT"
+repository = "https://github.com/mkouhia/wundernut-vol13"
 
 [dependencies]
 anyhow = "1.0.86"
