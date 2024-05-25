@@ -1,0 +1,8 @@
+[package]
+name = "wundernut-vol13"
+version = "0.1.0"
+edition = "2021"
+description = "Solution to Wundernut vol. 13"
+readme = "README.md"
+
+[dependencies]
