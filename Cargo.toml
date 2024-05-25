@@ -6,3 +6,4 @@ description = "Solution to Wundernut vol. 13"
 readme = "README.md"
 
 [dependencies]
+anyhow = "1.0.86"
