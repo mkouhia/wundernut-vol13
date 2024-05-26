@@ -9,3 +9,4 @@ repository = "https://github.com/mkouhia/wundernut-vol13"
 
 [dependencies]
 anyhow = "1.0.86"
+petgraph = "0.6.5"

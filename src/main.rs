@@ -12,7 +12,7 @@ fn main() -> anyhow::Result<()> {
 
     if let Some(emoji_file) = file_arg {
         let emojis: String = fs::read_to_string(emoji_file)?;
-        let maze = Maze::parse_emojis(&emojis)?;
+        let mut maze = Maze::parse_emojis(emojis.trim())?;
         let solution = maze.solve()?;
         solution.print_report();
     } else {
