@@ -10,7 +10,7 @@ The problem is to find a way out of a maze while avoiding a moving dragon.
 - Clone repository: `git clone git@github.com:mkouhia/wundernut-vol13.git`
 - With the maze in some local file, solve the maze and play back the solution with
 
-    cargo run -- --playback <filename>
+      cargo run -- --playback <FILE>
 
 See program help in
 
