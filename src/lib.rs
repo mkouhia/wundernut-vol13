@@ -43,6 +43,8 @@
 //! solution.print_report();
 //! ```
 
+use std::cmp::Ordering;
+use std::collections::BinaryHeap;
 use std::thread;
 use std::time::Duration;
 
@@ -102,6 +104,33 @@ pub enum EndingCondition {
     GOAL,
     /// Dragon reached hero
     FAIL,
+}
+
+/// Game state, employed in Dijkstra's algorithm binary heap
+///
+/// See: [Rust binary heap example](https://doc.rust-lang.org/std/collections/binary_heap/index.html)
+#[derive(Copy, Clone, Eq, PartialEq)]
+struct State {
+    /// Current number of steps taken
+    cost: usize,
+    /// Current position of the hero
+    position: NodeIndex,
+}
+
+impl Ord for State {
+    /// Min-heap placement comparison
+    fn cmp(&self, other: &Self) -> Ordering {
+        other
+            .cost
+            .cmp(&self.cost)
+            .then_with(|| self.position.cmp(&other.position))
+    }
+}
+
+impl PartialOrd for State {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl Maze {
@@ -267,7 +296,7 @@ impl Maze {
         let mut hero_steps = vec![self.hero_pos.clone()];
         let mut dragon_steps = vec![self.dragon_pos.clone()];
         let ending_condition = loop {
-            self.take_step_hero();
+            self.take_step_hero()?;
             self.current_step += 1;
             hero_steps.push(self.hero_pos.clone());
 
@@ -336,8 +365,70 @@ impl Maze {
         self.prev = Some(prev)
     }
 
-    fn take_step_hero(&mut self) {
-        // panic!("Not implemented")
+    /// WIP: Hero takes the shortest path to the goal
+    ///
+    /// The path is re-evaluated at every step.
+    fn take_step_hero(&mut self) -> anyhow::Result<()> {
+        let path = self.hero_dijkstra_naive()?;
+        self.hero_pos = path.into_iter().next().unwrap();
+        Ok(())
+    }
+
+    /// Solve hero path, without taking the dragon into account
+    fn hero_dijkstra_naive(&self) -> anyhow::Result<Vec<Point>> {
+        let mut dist: Vec<Option<usize>> = Vec::new();
+        let mut prev: Vec<Option<NodeIndex>> = Vec::new();
+        let mut heap = BinaryHeap::new();
+
+        for _ in self.graph.node_indices() {
+            dist.push(None);
+            prev.push(None);
+        }
+
+        let start = self.nodes[self.hero_pos.y][self.hero_pos.x].context("Hero node not found")?;
+        let goal = self.nodes[self.goal.y][self.goal.x].context("Goal node not found")?;
+        dist[start.index()] = Some(0);
+        heap.push(State {
+            cost: 0,
+            position: start,
+        });
+
+        while let Some(State { cost, position }) = heap.pop() {
+            if position == goal {
+                break;
+            }
+
+            for edge in self.graph.edges(position) {
+                let next = State {
+                    position: if edge.target() == position {
+                        edge.source()
+                    } else {
+                        edge.target()
+                    },
+                    cost: cost + 1,
+                };
+                if cost > dist[position.index()].unwrap_or(usize::MAX) {
+                    continue;
+                }
+                let v = next.position.index();
+                if next.cost < dist[v].unwrap_or(usize::MAX) {
+                    heap.push(next);
+                    dist[v] = Some(next.cost);
+                    prev[v] = Some(position);
+                }
+            }
+        }
+
+        let mut path = vec![self.goal.clone()];
+        let mut u_idx = goal.index();
+        while let Some(u) = prev[u_idx] {
+            let (y, x) = *self.graph.node_weight(u).context("Node was not in graph")?;
+            u_idx = u.index();
+            path.push(Point { y, x })
+        }
+        path.pop(); // Remove last value (current position)
+
+        Ok(path.into_iter().rev().collect())
     }
 
     /// Dragon movement is simple shortest-path algorithm to hero position
@@ -402,6 +493,8 @@ impl Maze {
             let (sq0, sq1) = match (sq0, sq1) {
                 // If dragon slays hero, dragon replaces hero with S_VALID
                 (Self::S_DRAGON, Self::S_HERO) => (sq0, Self::S_VALID),
+                // If hero walks to the dragon, dragon replaces hero with S_VALID
+                (Self::S_HERO, Self::S_DRAGON) => (sq1, Self::S_VALID),
                 // If hero reaches goal, hero replaces goal with S_VALID
                 (Self::S_HERO, Self::S_GOAL) => (sq0, Self::S_VALID),
                 _ => (sq0, sq1),
@@ -467,7 +560,6 @@ mod tests {
         assert_eq!(maze.graph.edge_indices().len(), 28)
     }
 
-    #[ignore = "not implemented"]
     #[test]
     fn hero_take_step() {
         let emojis = "
@@ -478,10 +570,9 @@ mod tests {
 🟫🟫🟫🟫🟫"
             .trim();
         let mut maze = Maze::parse_emojis(emojis).unwrap();
-        println!("{:?}\n{:?}", maze.nodes, maze.graph);
 
         assert_eq!(maze.hero_pos, Point { y: 1, x: 2 });
-        maze.take_step_hero();
+        maze.take_step_hero().unwrap();
         assert_eq!(maze.hero_pos, Point { y: 1, x: 3 });
     }
 
@@ -536,9 +627,25 @@ mod tests {
         assert_eq!(maze.dragon_pos, Point { y: 3, x: 1 });
     }
 
+    #[test]
+    fn around_the_edges() {
+        let emojis = "
+🟩🟩🟩🟩🟩
+🟩🟫🟫🟫🏃
+🐉🟩🟩🟫🟩
+🟩🟫🟩🟫🟩
+🟩🟩🟩🟫🟩
+🟩🟫🟫🟫🟩
+❎🟩🟩🟩🟩"
+            .trim();
+        let mut maze = Maze::parse_emojis(emojis).unwrap();
+        let solution = maze.solve().unwrap();
+        assert_eq!(solution.hero_steps.len() - 1, 9);
+    }
+
     #[ignore = "not implemented"]
     #[test]
-    fn sample() {
+    fn example_maze_1() {
         let emojis = "
 🟫🏃🟫🟫🟫🟫🟫
 🟫🟩🟩🟩🟩🟩🟫
@@ -546,25 +653,6 @@ mod tests {
 🟫🟩🟩🟩🟫🟩🟫
 🟫🐉🟫🟩🟫🟩🟫
 🟫🟩🟩🟩🟫🟩🟫
-🟫🟩🟫🟫🟫🟩🟫
-🟫🟩🟩🟩🟩🟩🟫
-🟫❎🟫🟫🟫🟫🟫"
-            .trim();
-        let mut maze = Maze::parse_emojis(emojis).unwrap();
-        let solution = maze.solve().unwrap();
-        assert_eq!(solution.hero_steps.len() - 1, 16);
-    }
-
-    #[ignore = "not implemented"]
-    #[test]
-    fn do_not_go_towards_dragon() {
-        let emojis = "
-🟫🏃🟫🟫🟫🟫🟫
-🟫🟩🟩🟩🟩🟩🟫
-🟫🟩🟫🟫🟫🟩🟫
-🟫🟩🟩🟩🟫🟩🟫
-🟫🟩🟫🟩🟫🟩🟫
-🟫🐉🟩🟩🟫🟩🟫
 🟫🟩🟫🟫🟫🟩🟫
 🟫🟩🟩🟩🟩🟩🟫
 🟫❎🟫🟫🟫🟫🟫"
