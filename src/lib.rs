@@ -152,9 +152,7 @@ impl Maze {
 
         for (y, row) in squares.iter().enumerate() {
             for (x, c) in row.iter().enumerate() {
-                if (y < shape.0 - 1) && (x < shape.1 - 1) {
-                    Self::add_to_graph(y, x, &mut graph, &mut nodes, &squares)?
-                }
+                Self::add_to_graph(y, x, &mut graph, &mut nodes, &squares, &shape)?;
 
                 // Find special squares
                 match *c {
@@ -195,12 +193,14 @@ impl Maze {
     /// - `graph`: Graph that we are building.
     /// - `nodes`: Node matrix (y*x), where node indices are inserted.
     /// - `squares`: Original character array.
+    /// - `shape`: Shape of the `squares` array.
     fn add_to_graph(
         y: usize,
         x: usize,
         graph: &mut Graph<(usize, usize), (), Undirected>,
         nodes: &mut [Vec<Option<NodeIndex>>],
         squares: &[Vec<char>],
+        shape: &(usize, usize),
     ) -> anyhow::Result<()> {
         match squares[y][x] {
             Self::S_VALID | Self::S_HERO | Self::S_DRAGON | Self::S_GOAL => {
@@ -208,6 +208,10 @@ impl Maze {
                 for (dy, dx) in [(1, 0), (0, 1)] {
                     let y1 = y + dy;
                     let x1 = x + dx;
+                    if (y1 == shape.0) || (x1 == shape.1) {
+                        continue;
+                    }
+
                     match squares[y1][x1] {
                         Self::S_VALID | Self::S_HERO | Self::S_DRAGON | Self::S_GOAL => {
                             let node_b = Self::get_or_create_node(y1, x1, nodes, graph);
