@@ -43,7 +43,11 @@
 //! solution.print_report();
 //! ```
 
+use std::thread;
+use std::time::Duration;
+
 use anyhow::{anyhow, bail, Context};
+use itertools::Itertools;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::{EdgeRef, IntoNodeReferences};
 use petgraph::{Graph, Undirected};
@@ -57,6 +61,8 @@ pub struct Point {
 
 /// Representation of the hero-dragon maze
 pub struct Maze {
+    /// Original layout of the problem
+    squares: Vec<Vec<char>>,
     /// Location of the final target
     goal: Point,
     /// Node indices
@@ -82,9 +88,9 @@ pub struct Maze {
 
 /// Solution to the maze
 pub struct MazeSolution {
-    /// The steps that the hero took
+    /// The steps that the hero took, including start & end
     pub hero_steps: Vec<Point>,
-    /// The steps that the dragon took
+    /// The steps that the dragon took, including start & end
     pub dragon_steps: Vec<Point>,
     /// Game status
     pub ending_condition: EndingCondition,
@@ -167,6 +173,7 @@ impl Maze {
         let hero_pos = hero_start.ok_or_else(|| anyhow!("Hero is not found in maze"))?;
         let dragon_pos = dragon_start.ok_or_else(|| anyhow!("Dragon is not found in maze"))?;
         Ok(Maze {
+            squares,
             hero_pos,
             dragon_pos,
             nodes,
@@ -253,8 +260,8 @@ impl Maze {
     pub fn solve(&mut self) -> anyhow::Result<MazeSolution> {
         self.init_shortest_paths();
 
-        let mut hero_steps = Vec::new();
-        let mut dragon_steps = Vec::new();
+        let mut hero_steps = vec![self.hero_pos.clone()];
+        let mut dragon_steps = vec![self.dragon_pos.clone()];
         let ending_condition = loop {
             self.take_step_hero();
             self.current_step += 1;
@@ -360,6 +367,47 @@ impl Maze {
             bail!("No connection from dragon position to hero position");
         }
     }
+
+    /// Print solution to console
+    ///
+    /// ## Arguments
+    /// - `solution`: Solution to the maze.
+    /// - `step_ms`: Time step for each frame, milliseconds.
+    pub fn playback(&self, solution: &MazeSolution, step_ms: usize) {
+        let hero_swaps = solution.hero_steps.windows(2).collect::<Vec<_>>();
+        let dragon_swaps = solution.dragon_steps.windows(2).collect::<Vec<_>>();
+        let all_swaps = itertools::interleave(hero_swaps, dragon_swaps);
+
+        fn print_squares(squares: &[Vec<char>]) {
+            print!("\x1B[2J\x1B[1;1H");
+            let sq_str = squares.iter().map(|row| row.iter().join("")).join("\n");
+            println!("{}", sq_str);
+        }
+
+        let mut squares = self.squares.clone();
+        print_squares(&squares);
+
+        for swap in all_swaps {
+            thread::sleep(Duration::from_millis(step_ms as u64));
+
+            let sq0 = squares[swap[0].y][swap[0].x];
+            let sq1 = squares[swap[1].y][swap[1].x];
+
+            // Special cases on the swap, when target is not `S_VALID`
+            let (sq0, sq1) = match (sq0, sq1) {
+                // If dragon slays hero, dragon replaces hero with S_VALID
+                (Self::S_DRAGON, Self::S_HERO) => (sq0, Self::S_VALID),
+                // If hero reaches goal, hero replaces goal with S_VALID
+                (Self::S_HERO, Self::S_GOAL) => (sq0, Self::S_VALID),
+                _ => (sq0, sq1),
+            };
+
+            squares[swap[0].y][swap[0].x] = sq1;
+            squares[swap[1].y][swap[1].x] = sq0;
+
+            print_squares(&squares);
+        }
+    }
 }
 
 impl MazeSolution {
@@ -367,12 +415,12 @@ impl MazeSolution {
     pub fn print_report(&self) {
         match self.ending_condition {
             EndingCondition::GOAL => {
-                println!("The shortest path is {} steps.", self.hero_steps.len())
+                println!("The shortest path is {} steps.", self.hero_steps.len() - 1)
             }
             EndingCondition::FAIL => {
                 println!(
                     "The dragon slayed the hero after {} steps.",
-                    self.dragon_steps.len()
+                    self.dragon_steps.len() - 1
                 )
             }
         }
