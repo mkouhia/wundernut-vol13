@@ -296,34 +296,35 @@ impl Maze {
     fn init_shortest_paths(&mut self) {
         let n = self.graph.node_indices().len();
 
-        let mut dist: Vec<Vec<usize>> = (0..n)
-            .map(|_| (0..n).map(|_| usize::MAX).collect())
-            .collect();
+        let mut dist: Vec<Vec<Option<usize>>> =
+            (0..n).map(|_| (0..n).map(|_| None).collect()).collect();
         let mut prev: Vec<Vec<_>> = (0..n).map(|_| (0..n).map(|_| None).collect()).collect();
 
         for edge in self.graph.edge_references() {
             let u = edge.source().index();
             let v = edge.target().index();
-            dist[u][v] = 1;
-            dist[v][u] = 1;
+            dist[u][v] = Some(1);
+            dist[v][u] = Some(1);
             prev[u][v] = Some(edge.source());
             prev[v][u] = Some(edge.target());
         }
         for (v, _) in self.graph.node_references() {
             let v_idx = v.index();
-            dist[v_idx][v_idx] = 0;
+            dist[v_idx][v_idx] = Some(0);
             prev[v_idx][v_idx] = Some(v);
         }
 
         for k in 0..n {
             for i in 0..n {
-                let v2 = dist[i][k];
-                for j in 0..n {
-                    if (dist[k][j] == usize::MAX) | (v2 == usize::MAX) {
-                    } else if dist[i][j] > v2 + dist[k][j] {
-                        dist[i][j] = v2 + dist[k][j];
-                        prev[i][j] = prev[k][j]
-                    };
+                if let Some(dist_ik) = dist[i][k] {
+                    for j in 0..n {
+                        if let Some(dist_kj) = dist[k][j] {
+                            if dist[i][j].unwrap_or(usize::MAX) > dist_ik + dist_kj {
+                                dist[i][j] = Some(dist_ik + dist_kj);
+                                prev[i][j] = prev[k][j]
+                            };
+                        }
+                    }
                 }
             }
         }
