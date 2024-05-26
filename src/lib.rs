@@ -48,7 +48,7 @@ use std::collections::BinaryHeap;
 use std::thread;
 use std::time::Duration;
 
-use anyhow::{anyhow, bail, Context};
+use anyhow::{anyhow, Context};
 use itertools::Itertools;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::{EdgeRef, IntoNodeReferences};
@@ -114,7 +114,9 @@ struct State {
     /// Current number of steps taken
     steps: usize,
     /// Current position of the hero
-    position: NodeIndex,
+    hero_idx: NodeIndex,
+    /// Current position of the dragon
+    dragon_idx: NodeIndex,
 }
 
 impl Ord for State {
@@ -123,7 +125,7 @@ impl Ord for State {
         other
             .steps
             .cmp(&self.steps)
-            .then_with(|| self.position.cmp(&other.position))
+            .then_with(|| self.hero_idx.cmp(&other.hero_idx))
     }
 }
 
@@ -385,34 +387,52 @@ impl Maze {
             prev.push(None);
         }
 
-        let position =
+        let hero_idx =
             self.nodes[self.hero_pos.y][self.hero_pos.x].context("Hero node not found")?;
+        let dragon_idx =
+            self.nodes[self.dragon_pos.y][self.dragon_pos.x].context("Dragon node not found")?;
         let goal = self.nodes[self.goal.y][self.goal.x].context("Goal node not found")?;
-        dist[position.index()] = Some(0);
-        heap.push(State { steps: 0, position });
+        dist[hero_idx.index()] = Some(0);
+        heap.push(State {
+            steps: 0,
+            hero_idx,
+            dragon_idx,
+        });
 
-        while let Some(State { steps, position }) = heap.pop() {
-            if position == goal {
+        while let Some(State {
+            steps,
+            hero_idx,
+            dragon_idx,
+        }) = heap.pop()
+        {
+            if hero_idx == goal {
                 break;
             }
 
-            for edge in self.graph.edges(position) {
+            for edge in self.graph.edges(hero_idx) {
                 let next = State {
-                    position: if edge.target() == position {
+                    hero_idx: if edge.target() == hero_idx {
                         edge.source()
                     } else {
                         edge.target()
                     },
                     steps: steps + 1,
+                    dragon_idx: self.dragon_step_inner(hero_idx, dragon_idx)?,
                 };
-                if steps > dist[position.index()].unwrap_or(usize::MAX) {
+                if steps > dist[hero_idx.index()].unwrap_or(usize::MAX) {
                     continue;
                 }
-                let v = next.position.index();
+
+                // Do not allow paths where dragon meets hero
+                if next.dragon_idx == hero_idx {
+                    continue;
+                }
+
+                let v = next.hero_idx.index();
                 if next.steps < dist[v].unwrap_or(usize::MAX) {
                     heap.push(next);
                     dist[v] = Some(next.steps);
-                    prev[v] = Some(position);
+                    prev[v] = Some(hero_idx);
                 }
             }
         }
@@ -438,28 +458,30 @@ impl Maze {
     /// Prior to calling this method, [Self::init_shortest_paths] shall
     /// be performed.
     fn take_step_dragon(&mut self) -> anyhow::Result<()> {
-        let u = self.nodes[self.hero_pos.y][self.hero_pos.x]
-            .context("Hero position not in node index")?
-            .index();
-        let v = self.nodes[self.dragon_pos.y][self.dragon_pos.x]
-            .context("Dragon position not in node index")?
-            .index();
+        let hero_idx = self.nodes[self.hero_pos.y][self.hero_pos.x]
+            .context("Hero position not in node index")?;
+        let dragon_idx = self.nodes[self.dragon_pos.y][self.dragon_pos.x]
+            .context("Dragon position not in node index")?;
+        let dragon_next = self.dragon_step_inner(hero_idx, dragon_idx)?;
+        let (y, x) = *self
+            .graph
+            .node_weight(dragon_next)
+            .context("Expected node address in graph")?;
+        self.dragon_pos = Point { y, x };
+        Ok(())
+    }
 
+    fn dragon_step_inner(
+        &self,
+        hero_idx: NodeIndex,
+        dragon_idx: NodeIndex,
+    ) -> anyhow::Result<NodeIndex> {
         let prev = self.prev.as_ref().ok_or_else(|| {
             anyhow!("Shortest paths not initialized. Please run Maze::init_shortest_paths")
         })?;
 
-        if let Some(dragon_next) = prev[u][v] {
-            let (y, x) = *self
-                .graph
-                .node_weight(dragon_next)
-                .context("Expected node address in graph")?;
-            self.dragon_pos = Point { y, x };
-
-            Ok(())
-        } else {
-            bail!("No connection from dragon position to hero position");
-        }
+        prev[hero_idx.index()][dragon_idx.index()]
+            .ok_or_else(|| anyhow!("No connection from dragon position to hero position"))
     }
 
     /// Print solution to console
@@ -568,6 +590,7 @@ mod tests {
 🟫🟫🟫🟫🟫"
             .trim();
         let mut maze = Maze::parse_emojis(emojis).unwrap();
+        maze.init_shortest_paths();
 
         assert_eq!(maze.hero_pos, Point { y: 1, x: 2 });
         maze.take_step_hero().unwrap();
@@ -641,7 +664,6 @@ mod tests {
         assert_eq!(solution.hero_steps.len() - 1, 9);
     }
 
-    #[ignore = "not implemented"]
     #[test]
     fn example_maze_1() {
         let emojis = "
