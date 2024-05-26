@@ -50,7 +50,7 @@ use petgraph::{Graph, Undirected};
 
 /// Location in the maze
 #[derive(PartialEq, Clone, Debug)]
-struct Point {
+pub struct Point {
     y: usize,
     x: usize,
 }
@@ -82,8 +82,20 @@ pub struct Maze {
 
 /// Solution to the maze
 pub struct MazeSolution {
-    /// Shortest path from start to finish
-    pub shortest_path: usize,
+    /// The steps that the hero took
+    pub hero_steps: Vec<Point>,
+    /// The steps that the dragon took
+    pub dragon_steps: Vec<Point>,
+    /// Game status
+    pub ending_condition: EndingCondition,
+}
+
+/// How the game ended
+pub enum EndingCondition {
+    /// Hero reached goal
+    GOAL,
+    /// Dragon reached hero
+    FAIL,
 }
 
 impl Maze {
@@ -240,18 +252,29 @@ impl Maze {
     /// without being caught by the dragon.
     pub fn solve(&mut self) -> anyhow::Result<MazeSolution> {
         self.init_shortest_paths();
-        loop {
+
+        let mut hero_steps = Vec::new();
+        let mut dragon_steps = Vec::new();
+        let ending_condition = loop {
             self.take_step_hero();
             self.current_step += 1;
+            hero_steps.push(self.hero_pos.clone());
 
-            if (self.hero_pos != self.goal) || (self.dragon_pos == self.hero_pos) {
-                break;
+            if self.hero_pos == self.goal {
+                break EndingCondition::GOAL;
             }
 
             self.take_step_dragon()?;
-        }
+            dragon_steps.push(self.dragon_pos.clone());
+
+            if self.dragon_pos == self.hero_pos {
+                break EndingCondition::FAIL;
+            }
+        };
         Ok(MazeSolution {
-            shortest_path: self.current_step,
+            hero_steps,
+            dragon_steps,
+            ending_condition,
         })
     }
 
@@ -342,7 +365,17 @@ impl Maze {
 impl MazeSolution {
     /// Print report
     pub fn print_report(&self) {
-        println!("The shortest path is {} steps.", self.shortest_path)
+        match self.ending_condition {
+            EndingCondition::GOAL => {
+                println!("The shortest path is {} steps.", self.hero_steps.len())
+            }
+            EndingCondition::FAIL => {
+                println!(
+                    "The dragon slayed the hero after {} steps.",
+                    self.dragon_steps.len()
+                )
+            }
+        }
     }
 }
 
