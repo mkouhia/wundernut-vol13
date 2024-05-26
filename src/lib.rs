@@ -547,7 +547,7 @@ mod tests {
             .trim();
         let mut maze = Maze::parse_emojis(emojis).unwrap();
         let solution = maze.solve().unwrap();
-        assert_eq!(solution.shortest_path, 16);
+        assert_eq!(solution.hero_steps.len() - 1, 16);
     }
 
     #[ignore = "not implemented"]
@@ -566,6 +566,6 @@ mod tests {
             .trim();
         let mut maze = Maze::parse_emojis(emojis).unwrap();
         let solution = maze.solve().unwrap();
-        assert_eq!(solution.shortest_path, 16);
+        assert_eq!(solution.hero_steps.len() - 1, 16);
     }
 }
