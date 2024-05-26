@@ -79,9 +79,6 @@ pub struct Maze {
     /// Current dragon position
     dragon_pos: Point,
 
-    /// Number of steps that the hero has taken
-    current_step: usize,
-
     /// Previous steps on the shortest path (u->v)
     ///
     /// This is initialized by [Self::floyd_warshall]
@@ -109,7 +106,7 @@ pub enum EndingCondition {
 /// Game state, employed in Dijkstra's algorithm binary heap
 ///
 /// See: [Rust binary heap example](https://doc.rust-lang.org/std/collections/binary_heap/index.html)
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 struct State {
     /// Current number of steps taken
     steps: usize,
@@ -208,8 +205,6 @@ impl Maze {
             nodes,
             graph,
             goal: goal.ok_or_else(|| anyhow!("Goal not found in maze"))?,
-            // nodes: nodes.into_iter().flatten().collect(),
-            current_step: 0,
             prev: None,
         })
     }
@@ -292,26 +287,35 @@ impl Maze {
     ///
     /// Find the shortest path that the hero can take to reach the exit,
     /// without being caught by the dragon.
+    ///
+    /// Employ [Dijkstra's algorithm][1], modified with simultaneous
+    /// dragon movement. After each path evaluation, the dragon also
+    /// moves. If dragon reaches the hero, the path is discarded.
+    ///
+    /// [1]: https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm
     pub fn solve(&mut self) -> anyhow::Result<MazeSolution> {
         self.init_shortest_paths();
 
-        let mut hero_steps = vec![self.hero_pos.clone()];
-        let mut dragon_steps = vec![self.dragon_pos.clone()];
-        let ending_condition = loop {
-            self.take_step_hero()?;
-            self.current_step += 1;
-            hero_steps.push(self.hero_pos.clone());
+        let states = self.hero_shortest_path()?;
 
-            if self.hero_pos == self.goal {
-                break EndingCondition::GOAL;
-            }
+        let (hero_steps, dragon_steps): (Vec<_>, Vec<_>) = states
+            .iter()
+            .filter_map(|s| {
+                match (
+                    self.graph.node_weight(s.hero_idx),
+                    self.graph.node_weight(s.dragon_idx),
+                ) {
+                    (Some(&u), Some(&v)) => {
+                        Some((Point { y: u.0, x: u.1 }, Point { y: v.0, x: v.1 }))
+                    }
+                    _ => None,
+                }
+            })
+            .unzip();
 
-            self.take_step_dragon()?;
-            dragon_steps.push(self.dragon_pos.clone());
-
-            if self.dragon_pos == self.hero_pos {
-                break EndingCondition::FAIL;
-            }
+        let ending_condition = match hero_steps.last() {
+            Some(last) if *last == self.goal => EndingCondition::GOAL,
+            _ => EndingCondition::FAIL,
         };
         Ok(MazeSolution {
             hero_steps,
@@ -367,19 +371,10 @@ impl Maze {
         self.prev = Some(prev)
     }
 
-    /// WIP: Hero takes the shortest path to the goal
-    ///
-    /// The path is re-evaluated at every step.
-    fn take_step_hero(&mut self) -> anyhow::Result<()> {
-        let path = self.hero_dijkstra_naive()?;
-        self.hero_pos = path.into_iter().next().unwrap();
-        Ok(())
-    }
-
-    /// Solve hero path, without taking the dragon into account
-    fn hero_dijkstra_naive(&self) -> anyhow::Result<Vec<Point>> {
+    /// Solve hero path
+    fn hero_shortest_path(&self) -> anyhow::Result<Vec<State>> {
         let mut dist: Vec<Option<usize>> = Vec::new();
-        let mut prev: Vec<Option<NodeIndex>> = Vec::new();
+        let mut prev = Vec::new();
         let mut heap = BinaryHeap::new();
 
         for _ in self.graph.node_indices() {
@@ -393,38 +388,35 @@ impl Maze {
             self.nodes[self.dragon_pos.y][self.dragon_pos.x].context("Dragon node not found")?;
         let goal = self.nodes[self.goal.y][self.goal.x].context("Goal node not found")?;
         dist[hero_idx.index()] = Some(0);
-        heap.push(State {
+        let mut outer_state = State {
             steps: 0,
             hero_idx,
             dragon_idx,
-        });
+        };
+        heap.push(outer_state);
 
-        while let Some(State {
-            steps,
-            hero_idx,
-            dragon_idx,
-        }) = heap.pop()
-        {
-            if hero_idx == goal {
+        while let Some(state) = heap.pop() {
+            if state.hero_idx == goal {
+                outer_state = state; // Store goal state
                 break;
             }
 
-            for edge in self.graph.edges(hero_idx) {
+            for edge in self.graph.edges(state.hero_idx) {
                 let next = State {
-                    hero_idx: if edge.target() == hero_idx {
+                    hero_idx: if edge.target() == state.hero_idx {
                         edge.source()
                     } else {
                         edge.target()
                     },
-                    steps: steps + 1,
-                    dragon_idx: self.dragon_step_inner(hero_idx, dragon_idx)?,
+                    steps: state.steps + 1,
+                    dragon_idx: self.dragon_step_inner(state.hero_idx, state.dragon_idx)?,
                 };
-                if steps > dist[hero_idx.index()].unwrap_or(usize::MAX) {
+                if state.steps > dist[state.hero_idx.index()].unwrap_or(usize::MAX) {
                     continue;
                 }
 
                 // Do not allow paths where dragon meets hero
-                if next.dragon_idx == hero_idx {
+                if next.dragon_idx == state.hero_idx {
                     continue;
                 }
 
@@ -432,21 +424,20 @@ impl Maze {
                 if next.steps < dist[v].unwrap_or(usize::MAX) {
                     heap.push(next);
                     dist[v] = Some(next.steps);
-                    prev[v] = Some(hero_idx);
+                    prev[v] = Some(state);
                 }
             }
         }
 
-        let mut path = vec![self.goal.clone()];
+        let mut path = vec![outer_state];
         let mut u_idx = goal.index();
-        while let Some(u) = prev[u_idx] {
-            let (y, x) = *self.graph.node_weight(u).context("Node was not in graph")?;
-            u_idx = u.index();
-            path.push(Point { y, x })
+        while let Some(state) = prev[u_idx] {
+            u_idx = state.hero_idx.index();
+            path.push(state)
         }
-        path.pop(); // Remove last value (current position)
+        path.reverse();
 
-        Ok(path.into_iter().rev().collect())
+        Ok(path)
     }
 
     /// Dragon movement is simple shortest-path algorithm to hero position
@@ -581,7 +572,7 @@ mod tests {
     }
 
     #[test]
-    fn hero_take_step() {
+    fn hero_goes_to_end() {
         let emojis = "
 🟫🟫🟫🟫🟫
 🟫🟩🏃🟩❎
@@ -591,10 +582,14 @@ mod tests {
             .trim();
         let mut maze = Maze::parse_emojis(emojis).unwrap();
         maze.init_shortest_paths();
+        let solution = maze.solve().unwrap();
+        let expected = vec![
+            Point { y: 1, x: 2 },
+            Point { y: 1, x: 3 },
+            Point { y: 1, x: 4 },
+        ];
 
-        assert_eq!(maze.hero_pos, Point { y: 1, x: 2 });
-        maze.take_step_hero().unwrap();
-        assert_eq!(maze.hero_pos, Point { y: 1, x: 3 });
+        assert_eq!(solution.hero_steps, expected);
     }
 
     #[test]
