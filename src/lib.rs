@@ -112,7 +112,7 @@ pub enum EndingCondition {
 #[derive(Copy, Clone, Eq, PartialEq)]
 struct State {
     /// Current number of steps taken
-    cost: usize,
+    steps: usize,
     /// Current position of the hero
     position: NodeIndex,
 }
@@ -121,8 +121,8 @@ impl Ord for State {
     /// Min-heap placement comparison
     fn cmp(&self, other: &Self) -> Ordering {
         other
-            .cost
-            .cmp(&self.cost)
+            .steps
+            .cmp(&self.steps)
             .then_with(|| self.position.cmp(&other.position))
     }
 }
@@ -385,15 +385,13 @@ impl Maze {
             prev.push(None);
         }
 
-        let start = self.nodes[self.hero_pos.y][self.hero_pos.x].context("Hero node not found")?;
+        let position =
+            self.nodes[self.hero_pos.y][self.hero_pos.x].context("Hero node not found")?;
         let goal = self.nodes[self.goal.y][self.goal.x].context("Goal node not found")?;
-        dist[start.index()] = Some(0);
-        heap.push(State {
-            cost: 0,
-            position: start,
-        });
+        dist[position.index()] = Some(0);
+        heap.push(State { steps: 0, position });
 
-        while let Some(State { cost, position }) = heap.pop() {
+        while let Some(State { steps, position }) = heap.pop() {
             if position == goal {
                 break;
             }
@@ -405,15 +403,15 @@ impl Maze {
                     } else {
                         edge.target()
                     },
-                    cost: cost + 1,
+                    steps: steps + 1,
                 };
-                if cost > dist[position.index()].unwrap_or(usize::MAX) {
+                if steps > dist[position.index()].unwrap_or(usize::MAX) {
                     continue;
                 }
                 let v = next.position.index();
-                if next.cost < dist[v].unwrap_or(usize::MAX) {
+                if next.steps < dist[v].unwrap_or(usize::MAX) {
                     heap.push(next);
-                    dist[v] = Some(next.cost);
+                    dist[v] = Some(next.steps);
                     prev[v] = Some(position);
                 }
             }
