@@ -50,9 +50,6 @@ use std::time::Duration;
 
 use anyhow::{anyhow, Context};
 use itertools::Itertools;
-use petgraph::graph::NodeIndex;
-use petgraph::visit::{EdgeRef, IntoNodeReferences};
-use petgraph::{Graph, Undirected};
 
 /// Location in the maze
 #[derive(PartialEq, Clone, Debug)]
@@ -67,12 +64,12 @@ pub struct Maze {
     squares: Vec<Vec<char>>,
     /// Location of the final target
     goal: Point,
-    /// Node indices
-    nodes: Vec<Vec<Option<NodeIndex>>>,
+
     /// Graph of the vertices between nodes
     ///
-    /// Weights of the nodes are the original (y, x) coordinates
-    graph: Graph<(usize, usize), (), Undirected>,
+    /// The original layout is deconstructed to a graph, with which
+    /// the routing problems are solved.
+    graph: Graph,
 
     /// Current hero position
     hero_pos: Point,
@@ -81,8 +78,8 @@ pub struct Maze {
 
     /// Previous steps on the shortest path (u->v)
     ///
-    /// This is initialized by [Self::floyd_warshall]
-    prev: Option<Vec<Vec<Option<NodeIndex>>>>,
+    /// This is initialized by [Self::init_shortest_paths]
+    prev: Option<Vec<Vec<Option<usize>>>>,
 }
 
 /// Solution to the maze
@@ -103,6 +100,61 @@ pub enum EndingCondition {
     FAIL,
 }
 
+/// Graph representation
+#[derive(PartialEq, Debug)]
+struct Graph {
+    /// The edges are stored as adjacency list representation
+    ///
+    /// First vec index is node `u` index, (usize), the inner vecs contain
+    /// `v` index values
+    edges: Vec<Vec<usize>>,
+    /// Node indices
+    ///
+    /// Each node is represented as usize, and the 2D coordinates in the
+    /// original grid are stored here.
+    nodes: Vec<Point>,
+}
+
+impl Graph {
+    /// Get node index from `nodes` array, or create new node.
+    ///
+    /// Nodes are created in `graph` and resulting indices inserted into
+    /// `nodes`.
+    fn get_or_create_node(&mut self, point: &Point) -> usize {
+        if let Some(idx) = self.get_node(point) {
+            idx
+        } else {
+            let j = self.nodes.len();
+            self.nodes.push(point.clone());
+            j
+        }
+    }
+
+    /// Get node from graph
+    fn get_node(&self, point: &Point) -> Option<usize> {
+        self.nodes
+            .iter()
+            .enumerate()
+            .find_map(|(i, p)| if p == point { Some(i) } else { None })
+    }
+
+    /// Add undirected edge between nodes u, v
+    ///
+    /// Actually this is just (u->v) and (v->u)
+    fn add_edge_undirected(&mut self, u: usize, v: usize) {
+        self.add_edge_directed(u, v);
+        self.add_edge_directed(v, u);
+    }
+
+    /// Add directed edge between nodes u, v
+    fn add_edge_directed(&mut self, u: usize, v: usize) {
+        while self.edges.len() <= u {
+            self.edges.push(Vec::new());
+        }
+        self.edges[u].push(v);
+    }
+}
+
 /// Game state, employed in Dijkstra's algorithm binary heap
 ///
 /// See: [Rust binary heap example](https://doc.rust-lang.org/std/collections/binary_heap/index.html)
@@ -111,9 +163,9 @@ struct State {
     /// Current number of steps taken
     steps: usize,
     /// Current position of the hero
-    hero_idx: NodeIndex,
+    hero_node: usize,
     /// Current position of the dragon
-    dragon_idx: NodeIndex,
+    dragon_node: usize,
 }
 
 impl Ord for State {
@@ -122,7 +174,7 @@ impl Ord for State {
         other
             .steps
             .cmp(&self.steps)
-            .then_with(|| self.hero_idx.cmp(&other.hero_idx))
+            .then_with(|| self.hero_node.cmp(&other.hero_node))
     }
 }
 
@@ -172,24 +224,25 @@ impl Maze {
             .map(|row| row.chars().collect())
             .collect();
 
-        let mut graph = Graph::new_undirected();
+        let mut graph = Graph {
+            edges: vec![],
+            nodes: vec![],
+        };
         let shape = (squares.len(), squares[0].len());
-        let mut nodes: Vec<Vec<Option<NodeIndex>>> = (0..shape.0)
-            .map(|_| (0..shape.1).map(|_| None).collect())
-            .collect();
 
         for (y, row) in squares.iter().enumerate() {
             for (x, c) in row.iter().enumerate() {
-                Self::add_to_graph(y, x, &mut graph, &mut nodes, &squares, &shape)?;
+                let point = Point { y, x };
+                Self::add_to_graph(&point, &mut graph, &squares, &shape)?;
 
                 // Find special squares
                 match *c {
-                    Self::S_HERO => hero_start = Some(Point { y, x }),
+                    Self::S_HERO => hero_start = Some(point),
                     Self::S_DRAGON => {
-                        dragon_start = Some(Point { y, x });
+                        dragon_start = Some(point);
                     }
                     Self::S_GOAL => {
-                        goal = Some(Point { y, x });
+                        goal = Some(point);
                     }
                     _ => (),
                 }
@@ -202,7 +255,6 @@ impl Maze {
             squares,
             hero_pos,
             dragon_pos,
-            nodes,
             graph,
             goal: goal.ok_or_else(|| anyhow!("Goal not found in maze"))?,
             prev: None,
@@ -221,33 +273,32 @@ impl Maze {
     /// - `squares`: Original character array.
     /// - `shape`: Shape of the `squares` array.
     fn add_to_graph(
-        y: usize,
-        x: usize,
-        graph: &mut Graph<(usize, usize), (), Undirected>,
-        nodes: &mut [Vec<Option<NodeIndex>>],
+        point: &Point,
+        graph: &mut Graph,
         squares: &[Vec<char>],
         shape: &(usize, usize),
     ) -> anyhow::Result<()> {
-        match squares[y][x] {
+        match squares[point.y][point.x] {
             Self::S_VALID | Self::S_HERO | Self::S_DRAGON | Self::S_GOAL => {
-                let node_a: NodeIndex = Self::get_or_create_node(y, x, nodes, graph);
+                let node_a = graph.get_or_create_node(point);
                 for (dy, dx) in [(1, 0), (0, 1)] {
-                    let y1 = y + dy;
-                    let x1 = x + dx;
+                    let y1 = point.y + dy;
+                    let x1 = point.x + dx;
                     if (y1 == shape.0) || (x1 == shape.1) {
                         continue;
                     }
 
+                    let point_b = Point { y: y1, x: x1 };
                     match squares[y1][x1] {
                         Self::S_VALID | Self::S_HERO | Self::S_DRAGON | Self::S_GOAL => {
-                            let node_b = Self::get_or_create_node(y1, x1, nodes, graph);
-                            graph.add_edge(node_a, node_b, ());
+                            let node_b = graph.get_or_create_node(&point_b);
+                            graph.add_edge_undirected(node_a, node_b);
                         }
                         Self::S_WALL => (), // Cannot access the other square
                         val => {
                             return Err(anyhow!(format!(
-                                "Unexpected character `{}` at y={}, x={}",
-                                val, x, y
+                                "Unexpected character `{}` at {:?}",
+                                val, point
                             )))
                         }
                     }
@@ -256,31 +307,12 @@ impl Maze {
             Self::S_WALL => (), // Could not access this square
             val => {
                 return Err(anyhow!(format!(
-                    "Unexpected character `{}` at y={}, x={}",
-                    val, x, y
+                    "Unexpected character `{}` at {:?}",
+                    val, point
                 )))
             }
         }
         Ok(())
-    }
-
-    /// Get node index from `nodes` array, or create new node.
-    ///
-    /// Nodes are created in `graph` and resulting indices inserted into
-    /// `nodes`.
-    fn get_or_create_node(
-        y: usize,
-        x: usize,
-        nodes: &mut [Vec<Option<NodeIndex>>],
-        graph: &mut Graph<(usize, usize), (), Undirected>,
-    ) -> NodeIndex {
-        if let Some(node) = nodes[y][x] {
-            node
-        } else {
-            let node = graph.add_node((y, x));
-            nodes[y][x] = Some(node);
-            node
-        }
     }
 
     /// Solve maze
@@ -300,16 +332,11 @@ impl Maze {
 
         let (hero_steps, dragon_steps): (Vec<_>, Vec<_>) = states
             .iter()
-            .filter_map(|s| {
-                match (
-                    self.graph.node_weight(s.hero_idx),
-                    self.graph.node_weight(s.dragon_idx),
-                ) {
-                    (Some(&u), Some(&v)) => {
-                        Some((Point { y: u.0, x: u.1 }, Point { y: v.0, x: v.1 }))
-                    }
-                    _ => None,
-                }
+            .map(|s| {
+                (
+                    self.graph.nodes[s.hero_node].clone(),
+                    self.graph.nodes[s.dragon_node].clone(),
+                )
             })
             .unzip();
 
@@ -333,24 +360,23 @@ impl Maze {
     ///
     /// See more: [Wikipedia](https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm#Path_reconstruction)
     fn init_shortest_paths(&mut self) {
-        let n = self.graph.node_indices().len();
+        let n = self.graph.nodes.len();
 
         let mut dist: Vec<Vec<Option<usize>>> =
             (0..n).map(|_| (0..n).map(|_| None).collect()).collect();
         let mut prev: Vec<Vec<_>> = (0..n).map(|_| (0..n).map(|_| None).collect()).collect();
 
-        for edge in self.graph.edge_references() {
-            let u = edge.source().index();
-            let v = edge.target().index();
-            dist[u][v] = Some(1);
-            dist[v][u] = Some(1);
-            prev[u][v] = Some(edge.source());
-            prev[v][u] = Some(edge.target());
+        for (u, edges) in self.graph.edges.iter().enumerate() {
+            for &v in edges {
+                dist[u][v] = Some(1);
+                dist[v][u] = Some(1);
+                prev[u][v] = Some(u);
+                prev[v][u] = Some(v);
+            }
         }
-        for (v, _) in self.graph.node_references() {
-            let v_idx = v.index();
-            dist[v_idx][v_idx] = Some(0);
-            prev[v_idx][v_idx] = Some(v);
+        for v in 0..self.graph.nodes.len() {
+            dist[v][v] = Some(0);
+            prev[v][v] = Some(v);
         }
 
         for k in 0..n {
@@ -377,50 +403,54 @@ impl Maze {
         let mut prev = Vec::new();
         let mut heap = BinaryHeap::new();
 
-        for _ in self.graph.node_indices() {
+        for _ in &self.graph.nodes {
             dist.push(None);
             prev.push(None);
         }
 
-        let hero_idx =
-            self.nodes[self.hero_pos.y][self.hero_pos.x].context("Hero node not found")?;
-        let dragon_idx =
-            self.nodes[self.dragon_pos.y][self.dragon_pos.x].context("Dragon node not found")?;
-        let goal = self.nodes[self.goal.y][self.goal.x].context("Goal node not found")?;
-        dist[hero_idx.index()] = Some(0);
+        let hero_node = self
+            .graph
+            .get_node(&self.hero_pos)
+            .context("Hero node not found")?;
+        let dragon_node = self
+            .graph
+            .get_node(&self.dragon_pos)
+            .context("Dragon node not found")?;
+        let goal_node = self
+            .graph
+            .get_node(&self.goal)
+            .context("Goal node not found")?;
+        dist[hero_node] = Some(0);
         let mut outer_state = State {
             steps: 0,
-            hero_idx,
-            dragon_idx,
+            hero_node,
+            dragon_node,
         };
         heap.push(outer_state);
 
         while let Some(state) = heap.pop() {
-            if state.hero_idx == goal {
+            if state.hero_node == goal_node {
                 outer_state = state; // Store goal state
                 break;
             }
 
-            for edge in self.graph.edges(state.hero_idx) {
+            for &v in &self.graph.edges[state.hero_node] {
                 let next = State {
-                    hero_idx: if edge.target() == state.hero_idx {
-                        edge.source()
-                    } else {
-                        edge.target()
-                    },
+                    hero_node: v,
                     steps: state.steps + 1,
-                    dragon_idx: self.dragon_step_inner(state.hero_idx, state.dragon_idx)?,
+                    dragon_node: self.dragon_step_inner(state.hero_node, state.dragon_node)?,
                 };
-                if state.steps > dist[state.hero_idx.index()].unwrap_or(usize::MAX) {
+
+                // TODO moe this out of the loop
+                if state.steps > dist[state.hero_node].unwrap_or(usize::MAX) {
                     continue;
                 }
 
                 // Do not allow paths where dragon meets hero
-                if next.dragon_idx == state.hero_idx {
+                if next.dragon_node == state.hero_node {
                     continue;
                 }
 
-                let v = next.hero_idx.index();
                 if next.steps < dist[v].unwrap_or(usize::MAX) {
                     heap.push(next);
                     dist[v] = Some(next.steps);
@@ -429,10 +459,11 @@ impl Maze {
             }
         }
 
+        // Transfer prev statements recursively to the beginning
         let mut path = vec![outer_state];
-        let mut u_idx = goal.index();
-        while let Some(state) = prev[u_idx] {
-            u_idx = state.hero_idx.index();
+        let mut u = goal_node;
+        while let Some(state) = prev[u] {
+            u = state.hero_node;
             path.push(state)
         }
         path.reverse();
@@ -449,29 +480,25 @@ impl Maze {
     /// Prior to calling this method, [Self::init_shortest_paths] shall
     /// be performed.
     fn take_step_dragon(&mut self) -> anyhow::Result<()> {
-        let hero_idx = self.nodes[self.hero_pos.y][self.hero_pos.x]
-            .context("Hero position not in node index")?;
-        let dragon_idx = self.nodes[self.dragon_pos.y][self.dragon_pos.x]
-            .context("Dragon position not in node index")?;
-        let dragon_next = self.dragon_step_inner(hero_idx, dragon_idx)?;
-        let (y, x) = *self
+        let hero_node = self
             .graph
-            .node_weight(dragon_next)
-            .context("Expected node address in graph")?;
-        self.dragon_pos = Point { y, x };
+            .get_node(&self.hero_pos)
+            .context("Hero node not found")?;
+        let dragon_node = self
+            .graph
+            .get_node(&self.dragon_pos)
+            .context("Dragon node not found")?;
+        let dragon_next = self.dragon_step_inner(hero_node, dragon_node)?;
+        self.dragon_pos = self.graph.nodes[dragon_next].clone();
         Ok(())
     }
 
-    fn dragon_step_inner(
-        &self,
-        hero_idx: NodeIndex,
-        dragon_idx: NodeIndex,
-    ) -> anyhow::Result<NodeIndex> {
+    fn dragon_step_inner(&self, hero_node: usize, dragon_node: usize) -> anyhow::Result<usize> {
         let prev = self.prev.as_ref().ok_or_else(|| {
             anyhow!("Shortest paths not initialized. Please run Maze::init_shortest_paths")
         })?;
 
-        prev[hero_idx.index()][dragon_idx.index()]
+        prev[hero_node][dragon_node]
             .ok_or_else(|| anyhow!("No connection from dragon position to hero position"))
     }
 
@@ -536,6 +563,7 @@ impl MazeSolution {
     }
 }
 
+/// Unit tests
 #[cfg(test)]
 mod tests {
     use crate::{Maze, Point};
@@ -559,16 +587,20 @@ mod tests {
         assert_eq!(maze.dragon_pos, Point { y: 4, x: 1 });
         assert_eq!(maze.goal, Point { y: 8, x: 1 });
 
+        let edge_pairs: Vec<(usize, usize)> = maze
+            .graph
+            .edges
+            .iter()
+            .enumerate()
+            .flat_map(|(u, v_vec)| v_vec.iter().map(|&v| (u, v)).collect::<Vec<_>>())
+            .collect();
+
+        assert_eq!(maze.graph.nodes.len(), 27);
         assert_eq!(
-            maze.nodes
-                .iter()
-                .flatten()
-                .filter(|n| n.is_some())
-                .collect::<Vec<_>>()
-                .len(),
-            27
-        );
-        assert_eq!(maze.graph.edge_indices().len(), 28)
+            edge_pairs.len(),
+            28*2,
+            "Edges contain all (u->v) and (v->u) pairs"
+        )
     }
 
     #[test]

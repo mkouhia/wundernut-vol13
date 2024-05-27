@@ -11,4 +11,3 @@ repository = "https://github.com/mkouhia/wundernut-vol13"
 anyhow = "1.0.86"
 clap = { version = "4.5.4", features = ["derive"] }
 itertools = "0.13.0"
-petgraph = "0.6.5"
