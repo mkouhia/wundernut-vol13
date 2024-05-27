@@ -18,7 +18,7 @@
 //! let mut maze = Maze::parse_emojis(maze_emojis.trim()).unwrap();
 //! let solution = maze.solve().unwrap();
 //! solution.print_report();
-//! // assert_eq!(solution.shortest_path, 16)
+//! assert_eq!(solution.hero_positions.len(), 16 + 1, "Hero traveled 16 steps + original position")
 //! ```
 //!
 //! ## Example maze 2
@@ -85,9 +85,9 @@ pub struct Maze {
 /// Solution to the maze
 pub struct MazeSolution {
     /// The steps that the hero took, including start & end
-    pub hero_steps: Vec<Point>,
+    pub hero_positions: Vec<Point>,
     /// The steps that the dragon took, including start & end
-    pub dragon_steps: Vec<Point>,
+    pub dragon_positions: Vec<Point>,
     /// Game status
     pub ending_condition: EndingCondition,
 }
@@ -266,10 +266,8 @@ impl Maze {
     /// Process only positive delta x and delta y, because graph is undirected.
     ///
     /// ## Arguments
-    /// - `y`: Current y position.
-    /// - `x`: Current x position.
+    /// - `point`: Current y, x position.
     /// - `graph`: Graph that we are building.
-    /// - `nodes`: Node matrix (y*x), where node indices are inserted.
     /// - `squares`: Original character array.
     /// - `shape`: Shape of the `squares` array.
     fn add_to_graph(
@@ -328,9 +326,9 @@ impl Maze {
     pub fn solve(&mut self) -> anyhow::Result<MazeSolution> {
         self.init_shortest_paths();
 
-        let states = self.hero_shortest_path()?;
+        let states = self.solve_hero_shortest_path()?;
 
-        let (hero_steps, dragon_steps): (Vec<_>, Vec<_>) = states
+        let (hero_positions, dragon_positions): (Vec<_>, Vec<_>) = states
             .iter()
             .map(|s| {
                 (
@@ -340,13 +338,13 @@ impl Maze {
             })
             .unzip();
 
-        let ending_condition = match hero_steps.last() {
+        let ending_condition = match hero_positions.last() {
             Some(last) if *last == self.goal => EndingCondition::GOAL,
             _ => EndingCondition::FAIL,
         };
         Ok(MazeSolution {
-            hero_steps,
-            dragon_steps,
+            hero_positions,
+            dragon_positions,
             ending_condition,
         })
     }
@@ -397,8 +395,12 @@ impl Maze {
         self.prev = Some(prev)
     }
 
-    /// Solve hero path
-    fn hero_shortest_path(&self) -> anyhow::Result<Vec<State>> {
+    /// Solve hero path with modified Dijkstra's algorithm
+    ///
+    /// ## Returns
+    /// Vec of [State] objects, which represent what had happened
+    /// under the hero`s journey
+    fn solve_hero_shortest_path(&self) -> anyhow::Result<Vec<State>> {
         let mut dist: Vec<Option<usize>> = Vec::new();
         let mut prev = Vec::new();
         let mut heap = BinaryHeap::new();
@@ -503,8 +505,8 @@ impl Maze {
     /// - `solution`: Solution to the maze.
     /// - `step_ms`: Time step for each frame, milliseconds.
     pub fn playback(&self, solution: &MazeSolution, step_ms: usize) {
-        let hero_swaps = solution.hero_steps.windows(2).collect::<Vec<_>>();
-        let dragon_swaps = solution.dragon_steps.windows(2).collect::<Vec<_>>();
+        let hero_swaps = solution.hero_positions.windows(2).collect::<Vec<_>>();
+        let dragon_swaps = solution.dragon_positions.windows(2).collect::<Vec<_>>();
         let all_swaps = itertools::interleave(hero_swaps, dragon_swaps);
 
         fn print_squares(squares: &[Vec<char>]) {
@@ -546,12 +548,15 @@ impl MazeSolution {
     pub fn print_report(&self) {
         match self.ending_condition {
             EndingCondition::GOAL => {
-                println!("The shortest path is {} steps.", self.hero_steps.len() - 1)
+                println!(
+                    "The shortest path is {} steps.",
+                    self.hero_positions.len() - 1
+                )
             }
             EndingCondition::FAIL => {
                 println!(
                     "The dragon slayed the hero after {} steps.",
-                    self.dragon_steps.len() - 1
+                    self.dragon_positions.len() - 1
                 )
             }
         }
@@ -593,7 +598,7 @@ mod tests {
         assert_eq!(maze.graph.nodes.len(), 27);
         assert_eq!(
             edge_pairs.len(),
-            28*2,
+            28 * 2,
             "Edges contain all (u->v) and (v->u) pairs"
         )
     }
@@ -616,7 +621,7 @@ mod tests {
             Point { y: 1, x: 4 },
         ];
 
-        assert_eq!(solution.hero_steps, expected);
+        assert_eq!(solution.hero_positions, expected);
     }
 
     #[test]
@@ -683,7 +688,7 @@ mod tests {
             .trim();
         let mut maze = Maze::parse_emojis(emojis).unwrap();
         let solution = maze.solve().unwrap();
-        assert_eq!(solution.hero_steps.len() - 1, 9);
+        assert_eq!(solution.hero_positions.len() - 1, 9);
     }
 
     #[test]
@@ -701,6 +706,6 @@ mod tests {
             .trim();
         let mut maze = Maze::parse_emojis(emojis).unwrap();
         let solution = maze.solve().unwrap();
-        assert_eq!(solution.hero_steps.len() - 1, 16);
+        assert_eq!(solution.hero_positions.len() - 1, 16);
     }
 }
