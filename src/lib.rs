@@ -434,16 +434,6 @@ impl Maze {
                 break;
             }
 
-            // Note: here, one would typically check if the hero has already
-            // visited this node with a lower cost. However, as the dragon
-            // position matters, `dist` should include hero AND dragon
-            // position. Will leave out for now, but adding the check
-            // would decrease the heap size.
-            //
-            // if state.steps > dist[state.hero_node].unwrap_or(usize::MAX) {
-            //     continue;
-            // }
-
             for &v in &self.graph.edges[state.hero_node] {
                 let next = State {
                     hero_node: v,
