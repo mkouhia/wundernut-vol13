@@ -434,17 +434,22 @@ impl Maze {
                 break;
             }
 
+            // Note: here, one would typically check if the hero has already
+            // visited this node with a lower cost. However, as the dragon
+            // position matters, `dist` should include hero AND dragon
+            // position. Will leave out for now, but adding the check
+            // would decrease the heap size.
+            //
+            // if state.steps > dist[state.hero_node].unwrap_or(usize::MAX) {
+            //     continue;
+            // }
+
             for &v in &self.graph.edges[state.hero_node] {
                 let next = State {
                     hero_node: v,
                     steps: state.steps + 1,
                     dragon_node: self.dragon_step_inner(state.hero_node, state.dragon_node)?,
                 };
-
-                // TODO moe this out of the loop
-                if state.steps > dist[state.hero_node].unwrap_or(usize::MAX) {
-                    continue;
-                }
 
                 // Do not allow paths where dragon meets hero
                 if next.dragon_node == state.hero_node {
