@@ -426,13 +426,14 @@ impl Maze {
     fn solve_hero_shortest_path(&self) -> anyhow::Result<Vec<State>> {
         let dragon_prev: Vec<Vec<Option<usize>>> = self.graph.get_shortest_path_steps();
 
-        let mut dist: Vec<Option<usize>> = Vec::new();
-        let mut prev = Vec::new();
+        // Shortest distance to node: (hero pos, wrt. dragon pos)
+        let mut dist: Vec<Vec<Option<usize>>> = Vec::new();
+        let mut prev: Vec<Vec<Option<State>>> = Vec::new();
         let mut heap = BinaryHeap::new();
 
         for _ in &self.graph.nodes {
-            dist.push(None);
-            prev.push(None);
+            dist.push((0..self.graph.nodes.len()).map(|_| None).collect());
+            prev.push((0..self.graph.nodes.len()).map(|_| None).collect());
         }
 
         let hero_node = self
@@ -447,7 +448,7 @@ impl Maze {
             .graph
             .get_node(&self.goal)
             .expect("Goal node shall be in graph");
-        dist[hero_node] = Some(0);
+        dist[hero_node][dragon_node] = Some(0);
         let mut outer_state = State {
             steps: 0,
             hero_node,
@@ -461,40 +462,39 @@ impl Maze {
                 break;
             }
 
+            if state.steps > dist[state.hero_node][state.dragon_node].unwrap_or(usize::MAX) {
+                continue;
+            }
+
             for &v in &self.graph.edges[state.hero_node] {
                 let next = State {
                     hero_node: v,
                     steps: state.steps + 1,
-                    dragon_node: self.dragon_step_inner(
-                        state.hero_node,
-                        state.dragon_node,
-                        &dragon_prev,
-                    )?,
+                    dragon_node: self.dragon_step_inner(v, state.dragon_node, &dragon_prev)?,
                 };
 
                 // Do not allow paths where dragon meets hero
-                if next.dragon_node == state.hero_node {
+                if next.dragon_node == next.hero_node {
                     continue;
                 }
 
-                if next.steps < dist[v].unwrap_or(usize::MAX) {
+                if next.steps < dist[next.hero_node][next.dragon_node].unwrap_or(usize::MAX) {
                     heap.push(next);
-                    dist[v] = Some(next.steps);
-                    prev[v] = Some(state);
+                    dist[next.hero_node][next.dragon_node] = Some(next.steps);
+                    prev[next.hero_node][next.dragon_node] = Some(state);
                 }
             }
         }
 
-        if prev[goal_node].is_none() {
+        if prev[outer_state.hero_node][outer_state.dragon_node].is_none() {
             bail!("Hero cannot reach the goal: either no path to the end or the hero cannot avoid the dragon.")
         }
 
         // Transfer prev statements recursively to the beginning
         let mut path = vec![outer_state];
-        let mut u = goal_node;
-        while let Some(state) = prev[u] {
-            u = state.hero_node;
-            path.push(state)
+        while let Some(state) = prev[outer_state.hero_node][outer_state.dragon_node] {
+            path.push(state);
+            outer_state = state;
         }
         path.reverse();
 
@@ -692,6 +692,21 @@ mod tests {
         let maze = Maze::parse_emojis(emojis).unwrap();
         let solution = maze.solve().unwrap();
         assert_eq!(solution.hero_positions.len() - 1, 16);
+    }
+
+    #[test]
+    fn hero_can_step_back() {
+        let emojis = "
+🟩🟩🟩🟩🟩🟩🟩🟩🟫
+🟫🟩🟫🟫🟫🟩🟫🟩🟫
+🟩🟩🏃🟩🟩🟩🟫🟩🟫
+🟫🟩🟫🟩🟫🟩🟫🟩🟫
+🟩🟩🟫🟩🟩🟩🐉🟩❎
+🟫🟩🟫🟩🟫🟫🟫🟩🟫"
+            .trim();
+        let maze = Maze::parse_emojis(emojis).unwrap();
+        let solution = maze.solve().unwrap();
+        assert_eq!(solution.hero_positions.len() - 1, 10);
     }
 
     #[test]

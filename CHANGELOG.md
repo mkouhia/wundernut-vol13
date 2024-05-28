@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Rename main binary executable to `solve-maze`
 
+## [0.1.2] - 2024-05-28
+
+### Changed
+- Dijkstra's algorithm distance takes into account the dragon position
+
+### Fixed
+- Dragon movement tracks current hero position, previously it was n-1.
+
 ## [0.1.1] - 2024-05-28
 
 ### Changed
@@ -28,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dragon routing based on shortest path to current hero position.
 - Playback solution.
 
-[unreleased]: https://github.com/mkouhia/wundernut-vol13/compare/v0.1.1...HEAD
+[unreleased]: https://github.com/mkouhia/wundernut-vol13/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/mkouhia/wundernut-vol13/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/mkouhia/wundernut-vol13/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/mkouhia/wundernut-vol13/tree/v0.1.0
