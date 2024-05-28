@@ -70,12 +70,18 @@ pub struct Maze {
     /// Original layout of the problem
     squares: Vec<Vec<char>>,
 
-    /// Hero starting position
-    hero_start: Point,
-    /// Dragon starting position
-    dragon_start: Point,
-    /// Location of the final target
-    goal: Point,
+    /// Hero starting position, node index in the graph
+    ///
+    /// Get Point position with `self.graph.nodes[hero_start]`
+    hero_start: usize,
+    /// Dragon starting position, node index in the graph
+    ///
+    /// Get Point position with `self.graph.nodes[dragon_start]`
+    dragon_start: usize,
+    /// Location of the final target, node index in the graph
+    ///
+    /// Get Point position with `self.graph.nodes[goal]`
+    goal: usize,
 
     /// Graph of the vertices between nodes
     ///
@@ -289,16 +295,16 @@ impl Maze {
         for (y, row) in squares.iter().enumerate() {
             for (x, c) in row.iter().enumerate() {
                 let point = Point { y, x };
-                Self::add_to_graph(&point, &mut graph, &squares, &shape)?;
+                let node = Self::process_square(&point, &mut graph, &squares, &shape)?;
 
                 // Find special squares
                 match *c {
-                    Self::S_HERO => hero_start = Some(point),
+                    Self::S_HERO => hero_start = node,
                     Self::S_DRAGON => {
-                        dragon_start = Some(point);
+                        dragon_start = node;
                     }
                     Self::S_GOAL => {
-                        goal = Some(point);
+                        goal = node;
                     }
                     _ => (),
                 }
@@ -314,21 +320,29 @@ impl Maze {
         })
     }
 
-    /// Add nodes (x, y) and edges (y, x) <--> (y1, x1) to graph.
+    /// Process point in original tiled map
+    ///
+    /// If square is valid terrain, add nodes (x, y) and edges (y, x) <-->
+    /// (y1, x1) to graph, if they did not already exist.
     ///
     /// Process only positive delta x and delta y, because graph is undirected.
+    /// Add neighbouring nodes to the graph at the same time.
     ///
     /// ## Arguments
     /// - `point`: Current y, x position.
     /// - `graph`: Graph that we are building.
     /// - `squares`: Original character array.
     /// - `shape`: Shape of the `squares` array.
-    fn add_to_graph(
+    ///
+    /// ## Returns
+    /// Some node index for the current Point, if the square was valid.
+    /// None if the terrain was wall.
+    fn process_square(
         point: &Point,
         graph: &mut Graph,
         squares: &[Vec<char>],
         shape: &(usize, usize),
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Option<usize>> {
         match squares[point.y][point.x] {
             Self::S_VALID | Self::S_HERO | Self::S_DRAGON | Self::S_GOAL => {
                 let node_a = graph.get_or_create_node(point);
@@ -354,16 +368,14 @@ impl Maze {
                         }
                     }
                 }
+                Ok(Some(node_a))
             }
-            Self::S_WALL => (), // Could not access this square
-            val => {
-                return Err(anyhow!(format!(
-                    "Unexpected character `{}` at {:?}",
-                    val, point
-                )))
-            }
+            Self::S_WALL => Ok(None), // Could not access this square
+            val => Err(anyhow!(format!(
+                "Unexpected character `{}` at {:?}",
+                val, point
+            ))),
         }
-        Ok(())
     }
 
     /// Solve maze
@@ -392,8 +404,12 @@ impl Maze {
             })
             .unzip();
 
-        let ending_condition = match hero_positions.last() {
-            Some(last) if *last == self.goal => EndingCondition::GOAL,
+        let ending_condition = match states.last() {
+            Some(State {
+                steps: _,
+                hero_node,
+                dragon_node: _,
+            }) if *hero_node == self.goal => EndingCondition::GOAL,
             _ => EndingCondition::FAIL,
         };
 
@@ -436,28 +452,16 @@ impl Maze {
             prev.push((0..self.graph.nodes.len()).map(|_| None).collect());
         }
 
-        let hero_node = self
-            .graph
-            .get_node(&self.hero_start)
-            .expect("Hero node shall be in graph");
-        let dragon_node = self
-            .graph
-            .get_node(&self.dragon_start)
-            .expect("Dragon node shall be in graph");
-        let goal_node = self
-            .graph
-            .get_node(&self.goal)
-            .expect("Goal node shall be in graph");
-        dist[hero_node][dragon_node] = Some(0);
+        dist[self.hero_start][self.dragon_start] = Some(0);
         let mut outer_state = State {
             steps: 0,
-            hero_node,
-            dragon_node,
+            hero_node: self.hero_start,
+            dragon_node: self.dragon_start,
         };
         heap.push(outer_state);
 
         while let Some(state) = heap.pop() {
-            if state.hero_node == goal_node {
+            if state.hero_node == self.goal {
                 outer_state = state; // Store goal state
                 break;
             }
@@ -612,9 +616,9 @@ mod tests {
             .trim();
         let maze = Maze::parse_emojis(emojis).unwrap();
 
-        assert_eq!(maze.hero_start, Point { y: 0, x: 1 });
-        assert_eq!(maze.dragon_start, Point { y: 4, x: 1 });
-        assert_eq!(maze.goal, Point { y: 8, x: 1 });
+        assert_eq!(maze.graph.nodes[maze.hero_start], Point { y: 0, x: 1 });
+        assert_eq!(maze.graph.nodes[maze.dragon_start], Point { y: 4, x: 1 });
+        assert_eq!(maze.graph.nodes[maze.goal], Point { y: 8, x: 1 });
 
         let edge_pairs: Vec<(usize, usize)> = maze
             .graph
