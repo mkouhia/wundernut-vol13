@@ -20,7 +20,7 @@ The problem is to find a way out of a maze while avoiding a moving dragon.
 
 - With the maze in some local file, solve the maze with
 
-      ./target/release/solve-maze <FILE>
+      ./target/release/solve-maze [OPTIONS] <FILE>
 
 - _Fun factor:_ solve and display the hero's journey in the maze:
 
@@ -33,11 +33,16 @@ If necessary, consult the program help in
 ### Extras
 Additional feature `mapgen` will can generate more maps for an increased fun factor. Build with feature `mapgen` to create another binary `generate-maze`:
 
-      cargo build --feature mapgen --release
+      cargo build --features mapgen --release
 
 Then you can generate additional mazes with 
 
-    ./target/release/generate-maze
+    ./target/release/generate-maze [OPTIONS]
+
+To generate a maze and play back results, perform
+
+    ./target/release/generate-maze | ./target/release/solve-maze -p -
+
 
 
 ## Implementation
