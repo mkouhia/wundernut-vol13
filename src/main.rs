@@ -30,7 +30,8 @@ fn main() -> anyhow::Result<()> {
     let solution = maze.solve()?;
     if args.playback {
         maze.playback(&solution, args.frame_length);
+    } else {
+        solution.print_report();
     }
-    solution.print_report();
     Ok(())
 }

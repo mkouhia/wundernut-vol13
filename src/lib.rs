@@ -510,11 +510,14 @@ impl Maze {
             .ok_or_else(|| anyhow!("No connection from dragon position to hero position"))
     }
 
-    /// Print solution to console
+    /// Print solution to console, step by step
     ///
     /// Clear screen, display animation with the same characters as in
     /// the original puzzle. Swap characters around the map with each
     /// movement.
+    ///
+    /// Print hero step counter under the maze, and when playback has
+    /// finished, replace step counter with solution report.
     ///
     /// ## Arguments
     /// - `solution`: Solution to the maze.
@@ -532,8 +535,9 @@ impl Maze {
 
         let mut squares = self.squares.clone();
         print_squares(&squares);
+        println!("Step 0");
 
-        for swap in all_swaps {
+        for (i, swap) in all_swaps.enumerate() {
             thread::sleep(Duration::from_millis(step_ms as u64));
 
             let sq0 = squares[swap[0].y][swap[0].x];
@@ -554,7 +558,11 @@ impl Maze {
             squares[swap[1].y][swap[1].x] = sq0;
 
             print_squares(&squares);
+            println!("Step {}", i / 2 + 1)
         }
+        // Clear step counter, as the print_report replaces it
+        print!("\x1B[A\x1B[2K");
+        solution.print_report()
     }
 }
 
