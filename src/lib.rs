@@ -57,13 +57,6 @@ use itertools::Itertools;
 #[cfg(feature = "mapgen")]
 pub mod maze_generator;
 
-/// Location in the maze
-#[derive(PartialEq, Clone, Debug)]
-pub struct Point {
-    y: usize,
-    x: usize,
-}
-
 /// Representation of the hero-dragon maze
 #[derive(Debug)]
 pub struct Maze {
@@ -90,26 +83,6 @@ pub struct Maze {
     graph: Graph,
 }
 
-/// Solution to the maze
-#[derive(PartialEq, Debug)]
-pub struct MazeSolution {
-    /// The steps that the hero took, including start & end
-    pub hero_positions: Vec<Point>,
-    /// The steps that the dragon took, including start & end
-    pub dragon_positions: Vec<Point>,
-    /// Game status
-    pub ending_condition: EndingCondition,
-}
-
-/// How the game ended
-#[derive(PartialEq, Debug)]
-pub enum EndingCondition {
-    /// Hero reached goal
-    GOAL,
-    /// Dragon reached hero
-    FAIL,
-}
-
 /// Graph representation
 #[derive(PartialEq, Debug)]
 struct Graph {
@@ -125,93 +98,30 @@ struct Graph {
     nodes: Vec<Point>,
 }
 
-impl Graph {
-    /// Get node index from `nodes` array, or create new node.
-    ///
-    /// Nodes are created in `graph` and resulting indices inserted into
-    /// `nodes`.
-    fn get_or_create_node(&mut self, point: &Point) -> usize {
-        if let Some(idx) = self.get_node(point) {
-            idx
-        } else {
-            let j = self.nodes.len();
-            self.nodes.push(point.clone());
-            j
-        }
-    }
+/// Solution to the maze
+#[derive(PartialEq, Debug)]
+pub struct MazeSolution {
+    /// The steps that the hero took, including start & end
+    pub hero_positions: Vec<Point>,
+    /// The steps that the dragon took, including start & end
+    pub dragon_positions: Vec<Point>,
+    /// Game status
+    pub ending_condition: EndingCondition,
+}
 
-    /// Get node from graph
-    fn get_node(&self, point: &Point) -> Option<usize> {
-        self.nodes
-            .iter()
-            .enumerate()
-            .find_map(|(i, p)| if p == point { Some(i) } else { None })
-    }
-
-    /// Add undirected edge between nodes u, v
-    ///
-    /// Actually this is just (u->v) and (v->u)
-    fn add_edge_undirected(&mut self, u: usize, v: usize) {
-        self.add_edge_directed(u, v);
-        self.add_edge_directed(v, u);
-    }
-
-    /// Add directed edge between nodes u, v
-    fn add_edge_directed(&mut self, u: usize, v: usize) {
-        while self.edges.len() <= u {
-            self.edges.push(Vec::new());
-        }
-        self.edges[u].push(v);
-    }
-
-    /// Run Floyd-Warshall algorithm for determining all shortest paths
-    ///
-    /// The algorithm will find the shortest path for any node combinations
-    /// (u, v).
-    ///
-    /// ## Returns
-    /// Positions as a 2D vec, containing the _penultimate step_ on the
-    /// path from node `u` towards node `v`. The vec values are node
-    /// indices on [Self::nodes]
-    ///
-    /// See more: [Wikipedia](https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm#Path_reconstruction)
-    fn get_shortest_path_steps(&self) -> Vec<Vec<Option<usize>>> {
-        let n = self.nodes.len();
-
-        let mut dist: Vec<Vec<Option<usize>>> =
-            (0..n).map(|_| (0..n).map(|_| None).collect()).collect();
-        let mut prev: Vec<Vec<_>> = (0..n).map(|_| (0..n).map(|_| None).collect()).collect();
-
-        for (u, edges) in self.edges.iter().enumerate() {
-            for &v in edges {
-                dist[u][v] = Some(1);
-                dist[v][u] = Some(1);
-                prev[u][v] = Some(u);
-                prev[v][u] = Some(v);
-            }
-        }
-        for v in 0..self.nodes.len() {
-            dist[v][v] = Some(0);
-            prev[v][v] = Some(v);
-        }
-
-        for k in 0..n {
-            for i in 0..n {
-                if let Some(dist_ik) = dist[i][k] {
-                    for j in 0..n {
-                        if let Some(dist_kj) = dist[k][j] {
-                            if dist[i][j].unwrap_or(usize::MAX) > dist_ik + dist_kj {
-                                dist[i][j] = Some(dist_ik + dist_kj);
-                                prev[i][j] = prev[k][j]
-                            };
-                        }
-                    }
-                }
-            }
-        }
-
-        prev
-    }
+/// Location in the maze
+#[derive(PartialEq, Clone, Debug)]
+pub struct Point {
+    y: usize,
+    x: usize,
+}
+/// How the game ended
+#[derive(PartialEq, Debug)]
+pub enum EndingCondition {
+    /// Hero reached goal
+    GOAL,
+    /// Dragon reached hero
+    FAIL,
 }
 
 /// Game state, employed in Dijkstra's algorithm binary heap
@@ -593,6 +503,95 @@ impl MazeSolution {
                 )
             }
         }
+    }
+}
+
+impl Graph {
+    /// Get node index from `nodes` array, or create new node.
+    ///
+    /// Nodes are created in `graph` and resulting indices inserted into
+    /// `nodes`.
+    fn get_or_create_node(&mut self, point: &Point) -> usize {
+        if let Some(idx) = self.get_node(point) {
+            idx
+        } else {
+            let j = self.nodes.len();
+            self.nodes.push(point.clone());
+            j
+        }
+    }
+
+    /// Get node from graph
+    fn get_node(&self, point: &Point) -> Option<usize> {
+        self.nodes
+            .iter()
+            .enumerate()
+            .find_map(|(i, p)| if p == point { Some(i) } else { None })
+    }
+
+    /// Add undirected edge between nodes u, v
+    ///
+    /// Actually this is just (u->v) and (v->u)
+    fn add_edge_undirected(&mut self, u: usize, v: usize) {
+        self.add_edge_directed(u, v);
+        self.add_edge_directed(v, u);
+    }
+
+    /// Add directed edge between nodes u, v
+    fn add_edge_directed(&mut self, u: usize, v: usize) {
+        while self.edges.len() <= u {
+            self.edges.push(Vec::new());
+        }
+        self.edges[u].push(v);
+    }
+
+    /// Run Floyd-Warshall algorithm for determining all shortest paths
+    ///
+    /// The algorithm will find the shortest path for any node combinations
+    /// (u, v).
+    ///
+    /// ## Returns
+    /// Positions as a 2D vec, containing the _penultimate step_ on the
+    /// path from node `u` towards node `v`. The vec values are node
+    /// indices on [Self::nodes]
+    ///
+    /// See more: [Wikipedia](https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm#Path_reconstruction)
+    fn get_shortest_path_steps(&self) -> Vec<Vec<Option<usize>>> {
+        let n = self.nodes.len();
+
+        let mut dist: Vec<Vec<Option<usize>>> =
+            (0..n).map(|_| (0..n).map(|_| None).collect()).collect();
+        let mut prev: Vec<Vec<_>> = (0..n).map(|_| (0..n).map(|_| None).collect()).collect();
+
+        for (u, edges) in self.edges.iter().enumerate() {
+            for &v in edges {
+                dist[u][v] = Some(1);
+                dist[v][u] = Some(1);
+                prev[u][v] = Some(u);
+                prev[v][u] = Some(v);
+            }
+        }
+        for v in 0..self.nodes.len() {
+            dist[v][v] = Some(0);
+            prev[v][v] = Some(v);
+        }
+
+        for k in 0..n {
+            for i in 0..n {
+                if let Some(dist_ik) = dist[i][k] {
+                    for j in 0..n {
+                        if let Some(dist_kj) = dist[k][j] {
+                            if dist[i][j].unwrap_or(usize::MAX) > dist_ik + dist_kj {
+                                dist[i][j] = Some(dist_ik + dist_kj);
+                                prev[i][j] = prev[k][j]
+                            };
+                        }
+                    }
+                }
+            }
+        }
+
+        prev
     }
 }
 
