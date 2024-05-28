@@ -62,13 +62,18 @@ impl MazeGenerator {
             }
         }
 
-        grid[0][random.gen_range(1..width - 1)] = self.hero;
-        grid[height - 1][random.gen_range(1..width - 1)] = self.goal;
+        if height >= width {
+            grid[0][random.gen_range(1..width - 1)] = self.hero;
+            grid[height - 1][random.gen_range(1..width - 1)] = self.goal;
+        } else {
+            grid[random.gen_range(1..height - 1)][0] = self.hero;
+            grid[random.gen_range(1..height - 1)][width - 1] = self.goal;
+        }
         let mut d_pos = random.gen_range(((width * height) / 2)..((width * height) * 3 / 4));
-        while grid[d_pos / height][d_pos % width] != self.valid {
+        while grid[d_pos / width][d_pos % width] != self.valid {
             d_pos -= 1;
         }
-        grid[d_pos / height][d_pos % width] = self.dragon;
+        grid[d_pos / width][d_pos % width] = self.dragon;
 
         grid
     }
