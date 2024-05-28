@@ -47,10 +47,11 @@ The search for the optimal path starts at the hero location.
 1. Structs representing the steps to the neighbouring nodes are placed in a binary heap, where the structs are ordered by increasing cost.
 2. The lowest cost struct is removed from the heap for evaluation. This way, we are always addressing the shortest path up until now.
 3. We check if the hero position in the current state is the goal. If it is, we just found the shortest path to the goal.
-4. For every neighbour of the hero node in current state, we evaluate possible hero movements, and after hero movement, where the dragon would go.
-5. If the dragon would meet the hero, the state is not accepted.
-6. All acceptable resulting states are pushed to the heap for evaluation.
-7. We loop over the possible states, taking more steps one by one until the goal is found.
+4. If hero has already visited this node with a lower cost, s.t. dragon is at the same position, we skip this branch.
+5. For every neighbour of the hero node in current state, we evaluate possible hero movements, and after hero movement, where the dragon would go.
+6. If the dragon would meet the hero, the state is not accepted.
+7. All acceptable resulting states are pushed to the heap for evaluation.
+8. We loop over the possible states, taking more steps one by one until the goal is found.
 
 
 ### Dragon movement
@@ -63,7 +64,6 @@ Upon calculating the shortest paths, the previous steps on the path `u->v`are sa
 ### General implementation notices
 - If the maze would have a square type with single access direction, that could be handled with directional edges.
 - Different terrain types could be handled by introducing edge weights.
-- The solution is not optimized for memory usage. In the hero shortest path algorithm, one would typically check if the hero has already visited the node with a lower cost. However, as the dragon position matters, `dist` should include hero _and_ dragon position, and it now contains only hero positions as usize index. For larger mazes, more complex `dist` implementation could reduce binary heap size.
 - For the problem solving algorithm, meeting a dragon and path to the goal not existing are equivalent: there is no feasible path to the end.
 
 ## Development
