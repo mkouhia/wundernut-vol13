@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Rename main binary executable to `solve-maze`
+- Maze `hero_start`, `dragon_start` and `goal` are now usize indexes.
 
 ## [0.1.2] - 2024-05-28
 
