@@ -92,3 +92,7 @@ When developing, the program may also be run with
 You can build the developer documentation with 
 
     cargo doc
+
+## Lisence
+
+This project is licensed under the terms of the MIT license.
