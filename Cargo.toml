@@ -1,6 +1,6 @@
 [package]
 name = "wundernut-vol13"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Mikko Kouhia <mikko.kouhia@iki.fi>"]
 edition = "2021"
 description = "Solution to Wundernut vol. 13"
