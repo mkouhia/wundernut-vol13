@@ -48,7 +48,7 @@ use std::collections::BinaryHeap;
 use std::thread;
 use std::time::Duration;
 
-use anyhow::{anyhow, Context};
+use anyhow::anyhow;
 use itertools::Itertools;
 
 /// Location in the maze
@@ -59,6 +59,7 @@ pub struct Point {
 }
 
 /// Representation of the hero-dragon maze
+#[derive(Debug)]
 pub struct Maze {
     /// Original layout of the problem
     squares: Vec<Vec<char>>,
@@ -78,6 +79,7 @@ pub struct Maze {
 }
 
 /// Solution to the maze
+#[derive(PartialEq, Debug)]
 pub struct MazeSolution {
     /// The steps that the hero took, including start & end
     pub hero_positions: Vec<Point>,
@@ -88,6 +90,7 @@ pub struct MazeSolution {
 }
 
 /// How the game ended
+#[derive(PartialEq, Debug)]
 pub enum EndingCondition {
     /// Hero reached goal
     GOAL,
@@ -373,7 +376,7 @@ impl Maze {
     pub fn solve(&self) -> anyhow::Result<MazeSolution> {
         let states = self.solve_hero_shortest_path()?;
 
-        let (hero_positions, dragon_positions): (Vec<_>, Vec<_>) = states
+        let (hero_positions, mut dragon_positions): (Vec<_>, Vec<_>) = states
             .iter()
             .map(|s| {
                 (
@@ -387,6 +390,12 @@ impl Maze {
             Some(last) if *last == self.goal => EndingCondition::GOAL,
             _ => EndingCondition::FAIL,
         };
+
+        // If hero reached their goal, remove ultimate dragon movement
+        if ending_condition == EndingCondition::GOAL {
+            dragon_positions.pop();
+        }
+
         Ok(MazeSolution {
             hero_positions,
             dragon_positions,
@@ -401,7 +410,13 @@ impl Maze {
     ///
     /// ## Returns
     /// Vec of [State] objects, which represent what had happened
-    /// under the hero`s journey
+    /// under the hero`s journey, including the start and end.
+    /// Dragon movement after hero reaches the goal is included in the
+    /// last state.
+    ///
+    /// # Errors
+    /// If no connection from the dragon position to the hero position
+    /// was found.
     fn solve_hero_shortest_path(&self) -> anyhow::Result<Vec<State>> {
         let dragon_prev: Vec<Vec<Option<usize>>> = self.graph.get_shortest_path_steps();
 
@@ -417,15 +432,15 @@ impl Maze {
         let hero_node = self
             .graph
             .get_node(&self.hero_start)
-            .context("Hero node not found")?;
+            .expect("Hero node shall be in graph");
         let dragon_node = self
             .graph
             .get_node(&self.dragon_start)
-            .context("Dragon node not found")?;
+            .expect("Dragon node shall be in graph");
         let goal_node = self
             .graph
             .get_node(&self.goal)
-            .context("Goal node not found")?;
+            .expect("Goal node shall be in graph");
         dist[hero_node] = Some(0);
         let mut outer_state = State {
             steps: 0,
@@ -476,6 +491,11 @@ impl Maze {
         Ok(path)
     }
 
+    /// Take step on the shortest path from the dragon to the hero
+    ///
+    /// Actually, find the penultimate position on the path from the hero
+    /// position to the dragon position, utilizing Floyd-Warshall path
+    /// reconstruction.
     fn dragon_step_inner(
         &self,
         hero_node: usize,
@@ -557,7 +577,7 @@ impl MazeSolution {
 /// Unit tests
 #[cfg(test)]
 mod tests {
-    use crate::{Maze, Point};
+    use crate::{EndingCondition, Maze, MazeSolution, Point};
 
     #[test]
     fn parse_maze_input() {
@@ -595,7 +615,7 @@ mod tests {
     }
 
     #[test]
-    fn hero_goes_to_end() {
+    fn check_simple_solution() {
         let emojis = "
 🟫🟫🟫🟫🟫
 🟫🟩🏃🟩❎
@@ -605,46 +625,21 @@ mod tests {
             .trim();
         let maze = Maze::parse_emojis(emojis).unwrap();
         let solution = maze.solve().unwrap();
-        let expected = vec![
-            Point { y: 1, x: 2 },
-            Point { y: 1, x: 3 },
-            Point { y: 1, x: 4 },
-        ];
+        let expected = MazeSolution {
+            hero_positions: vec![
+                Point { y: 1, x: 2 },
+                Point { y: 1, x: 3 },
+                Point { y: 1, x: 4 },
+            ],
+            dragon_positions: vec![
+                Point { y: 2, x: 1 },
+                Point { y: 1, x: 1 },
+                // This is one step shorter, because the hero reached the goal.
+            ],
+            ending_condition: EndingCondition::GOAL,
+        };
 
-        assert_eq!(solution.hero_positions, expected);
-    }
-
-    #[test]
-    fn dragon_goes_towards_hero() {
-        let emojis = "
-🟫🟫🟫🟫🟫
-🟫🟩🟩🏃❎
-🟫🐉🟫🟩🟫
-🟫🟩🟩🟩🟫
-🟫🟫🟫🟫🟫"
-            .trim();
-        let maze = Maze::parse_emojis(emojis).unwrap();
-        assert_eq!(maze.dragon_start, Point { y: 2, x: 1 });
-
-        let dragon_prev = maze.graph.get_shortest_path_steps();
-
-        let dragon_node = maze
-            .dragon_step_inner(
-                maze.graph.get_node(&maze.hero_start).unwrap(),
-                maze.graph.get_node(&maze.dragon_start).unwrap(),
-                &dragon_prev,
-            )
-            .unwrap();
-        assert_eq!(maze.graph.nodes[dragon_node], Point { y: 1, x: 1 });
-
-        let dragon_node = maze
-            .dragon_step_inner(
-                maze.graph.get_node(&maze.hero_start).unwrap(),
-                maze.graph.get_node(&Point { y: 1, x: 1 }).unwrap(),
-                &dragon_prev,
-            )
-            .unwrap();
-        assert_eq!(maze.graph.nodes[dragon_node], Point { y: 1, x: 2 });
+        assert_eq!(solution, expected);
     }
 
     #[test]
