@@ -48,7 +48,7 @@ use std::collections::BinaryHeap;
 use std::thread;
 use std::time::Duration;
 
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use itertools::Itertools;
 
 /// Location in the maze
@@ -479,6 +479,10 @@ impl Maze {
             }
         }
 
+        if prev[goal_node].is_none() {
+            bail!("Hero cannot reach the goal: either no path to the end or the hero cannot avoid the dragon.")
+        }
+
         // Transfer prev statements recursively to the beginning
         let mut path = vec![outer_state];
         let mut u = goal_node;
@@ -674,5 +678,41 @@ mod tests {
         let maze = Maze::parse_emojis(emojis).unwrap();
         let solution = maze.solve().unwrap();
         assert_eq!(solution.hero_positions.len() - 1, 16);
+    }
+
+    #[test]
+    fn no_path_to_end_invalid_maze() {
+        let emojis = "
+🟫🏃🟫🟫🟫🟫🟫
+🟫🟩🟩🟩🟩🟩🟫
+🟫🟩🟫🟫🟫🟩🟫
+🟫🟩🟩🟩🟫🟩🟫
+🟫🐉🟫🟩🟫🟩🟫
+🟫🟩🟩🟩🟫🟫🟫
+🟫🟫🟫🟫🟫🟩🟫
+🟫🟩🟩🟩🟩🟩🟫
+🟫❎🟫🟫🟫🟫🟫"
+            .trim();
+        let maze = Maze::parse_emojis(emojis).unwrap();
+        let solution = maze.solve();
+        assert!(solution.is_err())
+    }
+
+    #[test]
+    fn hero_cannot_avoid_dragon() {
+        let emojis = "
+🟫🏃🟫🟫🟫🟫🟫
+🟫🟩🟩🟩🟩🟩🟫
+🟫🟩🟫🟫🟫🟩🟫
+🟫🟩🟩🟩🟫🟩🟫
+🟫🐉🟫🟩🟫🟩🟫
+🟫🟩🟩🟩🟫🟫🟫
+🟫🟩🟫🟫🟫🟩🟫
+🟫🟩🟩🟩🟩🟩🟫
+🟫❎🟫🟫🟫🟫🟫"
+            .trim();
+        let maze = Maze::parse_emojis(emojis).unwrap();
+        let solution = maze.solve();
+        assert!(solution.is_err())
     }
 }

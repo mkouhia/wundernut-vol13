@@ -50,6 +50,7 @@ Upon calculating the shortest paths, the previous steps on the path `u->v`are sa
 - If the maze would have a square type with single access direction, that could be handled with directional edges.
 - Different terrain types could be handled by introducing edge weights.
 - The solution is not optimized for memory usage. In the hero shortest path algorithm, one would typically check if the hero has already visited the node with a lower cost. However, as the dragon position matters, `dist` should include hero _and_ dragon position, and it now contains only hero positions as usize index. For larger mazes, more complex `dist` implementation could reduce binary heap size.
+- For the problem solving algorithm, meeting a dragon and path to the goal not existing are equivalent: there is no feasible path to the end.
 
 ## Development
 
