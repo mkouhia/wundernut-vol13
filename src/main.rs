@@ -26,7 +26,7 @@ fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
     let emojis: String = fs::read_to_string(args.file)?;
-    let mut maze = Maze::parse_emojis(emojis.trim())?;
+    let maze = Maze::parse_emojis(emojis.trim())?;
     let solution = maze.solve()?;
     if args.playback {
         maze.playback(&solution, args.frame_length);
