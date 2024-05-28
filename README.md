@@ -7,14 +7,27 @@ The problem is to find a way out of a maze while avoiding a moving dragon.
 ## Quickstart
 
 - If Rust is not installed, install it as per instructions in [rust-lang.org](https://www.rust-lang.org/tools/install)
-- Clone repository: `git clone git@github.com:mkouhia/wundernut-vol13.git`
-- With the maze in some local file, solve the maze and play back the solution with
+- Clone the repository
 
-      cargo run -- --playback <FILE>
+      git clone git@github.com:mkouhia/wundernut-vol13.git`
 
-See program help in
+- Compile the program with
 
-    cargo run -- --help
+      cargo build --release
+
+  You will now find the executable in `./target/release/wundernut-vol13`, or if on Windows, `./target/release/wundernut-vol13.exe`. In following examples, replace program name with the correct path to the built executable, or copy the executable to a convenient location.
+
+- With the maze in some local file, solve the maze with
+
+      ./target/release/wundernut-vol13 <FILE>
+
+- _Fun factor:_ solve and display the hero's journey in the maze:
+
+      ./target/release/wundernut-vol13 --playback <FILE>
+
+If necessary, consult the program help in
+
+    ./target/release/wundernut-vol13 --help
 
 
 ## Implementation
@@ -69,3 +82,13 @@ Build release version of the program with
 After this, you may run the compiled binary program with
 
     ./target/release/wundernut-vol13
+
+When developing, the program may also be run with
+
+    cargo run
+
+### Documentation
+
+You can build the developer documentation with 
+
+    cargo doc
