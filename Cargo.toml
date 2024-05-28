@@ -7,8 +7,13 @@ description = "Solution to Wundernut vol. 13"
 readme = "README.md"
 license = "MIT"
 repository = "https://github.com/mkouhia/wundernut-vol13"
+default-run = "solve-maze"
 
 [dependencies]
 anyhow = "1.0.86"
 clap = { version = "4.5.4", features = ["derive"] }
 itertools = "0.13.0"
+
+[[bin]]
+name = "solve-maze"
+path = "src/main.rs"

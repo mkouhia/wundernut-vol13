@@ -16,19 +16,19 @@ The problem is to find a way out of a maze while avoiding a moving dragon.
 
       cargo build --release
 
-  You will now find the executable in `./target/release/wundernut-vol13`, or if on Windows, `./target/release/wundernut-vol13.exe`. In following examples, replace program name with the correct path to the built executable, or copy the executable to a convenient location.
+  You will now find the executable in `./target/release/solve-maze`, or if on Windows, `./target/release/solve-maze.exe`. In following examples, replace program name with the correct path to the built executable, or copy the executable to a convenient location.
 
 - With the maze in some local file, solve the maze with
 
-      ./target/release/wundernut-vol13 <FILE>
+      ./target/release/solve-maze <FILE>
 
 - _Fun factor:_ solve and display the hero's journey in the maze:
 
-      ./target/release/wundernut-vol13 --playback <FILE>
+      ./target/release/solve-maze --playback <FILE>
 
 If necessary, consult the program help in
 
-    ./target/release/wundernut-vol13 --help
+    ./target/release/solve-maze --help
 
 
 ## Implementation
@@ -82,7 +82,7 @@ Build release version of the program with
 
 After this, you may run the compiled binary program with
 
-    ./target/release/wundernut-vol13
+    ./target/release/solve-maze
 
 When developing, the program may also be run with
 
