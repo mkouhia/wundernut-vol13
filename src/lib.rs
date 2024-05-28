@@ -1,5 +1,8 @@
 //! Find a way out of the maze inhabited by a dragon
 //!
+//! # Features
+//! - `mapgen`: Map generation for CLI.
+//!
 //! # Examples
 //! ## Example maze 1 (the shortest path is 16)
 //! ```
@@ -50,6 +53,9 @@ use std::time::Duration;
 
 use anyhow::{anyhow, bail};
 use itertools::Itertools;
+
+#[cfg(feature = "mapgen")]
+pub mod maze_generator;
 
 /// Location in the maze
 #[derive(PartialEq, Clone, Debug)]

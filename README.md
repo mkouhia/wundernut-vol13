@@ -30,6 +30,15 @@ If necessary, consult the program help in
 
     ./target/release/wundernut-vol13 --help
 
+### Extras
+Additional feature `mapgen` will can generate more maps for an increased fun factor. Build with feature `mapgen` to create another binary `generate-maze`:
+
+      cargo build --feature mapgen --release
+
+Then you can generate additional mazes with 
+
+    ./target/release/generate-maze
+
 
 ## Implementation
 

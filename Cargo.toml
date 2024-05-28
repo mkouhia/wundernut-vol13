@@ -12,3 +12,11 @@ repository = "https://github.com/mkouhia/wundernut-vol13"
 anyhow = "1.0.86"
 clap = { version = "4.5.4", features = ["derive"] }
 itertools = "0.13.0"
+rand = { version = "0.8.5", optional = true }
+
+[features]
+mapgen = ["dep:rand"]
+
+[[bin]]
+name = "generate-maze"
+required-features = ["mapgen"]
