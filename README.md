@@ -26,6 +26,8 @@ The problem is to find a way out of a maze while avoiding a moving dragon.
 
       solve-maze --playback <FILE>
 
+  [solve-maze-example1.webm](https://github.com/mkouhia/wundernut-vol13/assets/1469093/23a9fed2-088a-4c8b-b3c7-5357f388b910)
+
 If necessary, consult the program help in
 
     solve-maze --help
@@ -43,6 +45,7 @@ To generate a maze and play back results, perform
 
     generate-maze | solve-maze -p -
 
+  [generate-and-solve-maze.webm](https://github.com/mkouhia/wundernut-vol13/assets/1469093/a65ba354-da9d-424a-88fd-5c66eaaf9ef1)
 
 
 ## Implementation
