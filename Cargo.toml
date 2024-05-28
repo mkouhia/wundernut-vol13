@@ -7,6 +7,7 @@ description = "Solution to Wundernut vol. 13"
 readme = "README.md"
 license = "MIT"
 repository = "https://github.com/mkouhia/wundernut-vol13"
+default-run = "solve-maze"
 
 [dependencies]
 anyhow = "1.0.86"
@@ -16,6 +17,10 @@ rand = { version = "0.8.5", optional = true }
 
 [features]
 mapgen = ["dep:rand"]
+
+[[bin]]
+name = "solve-maze"
+path = "src/main.rs"
 
 [[bin]]
 name = "generate-maze"
