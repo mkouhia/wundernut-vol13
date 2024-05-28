@@ -78,14 +78,16 @@ impl MazeGenerator {
 mod tests {
     use itertools::Itertools;
 
-    use crate::maze_generator::MazeGenerator;
+    use crate::{maze_generator::MazeGenerator, Maze};
 
     #[test]
-    fn get_some() {
+    fn generate_parseable_emoji_maze() {
         let gen = MazeGenerator::default();
-        let res = gen.generate_maze(16, 16);
-        println!("{}", res.iter().map(|row| row.iter().join("")).join("\n"));
+        let res = gen.generate_maze(16, 16, None);
 
-        assert!(false);
+        let emojis = res.iter().map(|row| row.iter().join("")).join("\n");
+
+        let parsed_result = Maze::parse_emojis(&emojis);
+        assert!(parsed_result.is_ok());
     }
 }
