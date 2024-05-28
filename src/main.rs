@@ -1,6 +1,10 @@
 //! CLI for maze solving
 
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    io::{self, Read},
+    path::PathBuf,
+};
 
 use clap::Parser;
 use wundernut_vol13::Maze;
@@ -17,7 +21,7 @@ struct Args {
     #[arg(short, long, default_value_t = 300)]
     frame_length: usize,
 
-    /// File, where to read the maze
+    /// File, where to read the maze. Use `-` for stdin.
     file: PathBuf,
 }
 
@@ -25,9 +29,16 @@ struct Args {
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    let emojis: String = fs::read_to_string(args.file)?;
+    let emojis = if args.file.to_str() == Some("-") {
+        let mut buf = String::new();
+        io::stdin().lock().read_to_string(&mut buf)?;
+        buf
+    } else {
+        fs::read_to_string(args.file)?
+    };
     let maze = Maze::parse_emojis(emojis.trim())?;
     let solution = maze.solve()?;
+
     if args.playback {
         maze.playback(&solution, args.frame_length);
     } else {
