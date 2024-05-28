@@ -7,7 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.0]
+## [0.1.1] - 2024-05-28
+
+### Changed
+- Correct readme.
+
+## [0.1.0] - 2024-05-28
 
 ### Added
 
@@ -16,5 +21,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dragon routing based on shortest path to current hero position.
 - Playback solution.
 
-[unreleased]: https://github.com/mkouhia/wundernut-vol13/compare/v0.1.0...HEAD
+[unreleased]: https://github.com/mkouhia/wundernut-vol13/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/mkouhia/wundernut-vol13/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/mkouhia/wundernut-vol13/tree/v0.1.0
