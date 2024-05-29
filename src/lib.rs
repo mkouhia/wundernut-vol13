@@ -193,7 +193,7 @@ impl Maze {
 
         let squares: Vec<Vec<char>> = emojis
             .split('\n')
-            .map(|row| row.chars().collect())
+            .map(|row| row.trim_end().chars().collect())
             .collect();
 
         let mut graph = Graph {
