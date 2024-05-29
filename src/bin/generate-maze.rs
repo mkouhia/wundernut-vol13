@@ -9,7 +9,7 @@ use wundernut_vol13::maze_generator::MazeGenerator;
 #[command(version, about, long_about = None)]
 struct Args {
     /// Generated field height
-    #[arg(long, default_value_t = 20)]
+    #[arg(long, default_value_t = 19)]
     height: usize,
 
     /// Generated field width
