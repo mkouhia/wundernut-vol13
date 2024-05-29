@@ -32,6 +32,21 @@ If necessary, consult the program help in
 
     solve-maze --help
 
+```
+Solution to Wundernut vol. 13
+
+Usage: solve-maze [OPTIONS] <FILE>
+
+Arguments:
+  <FILE>  File, where to read the maze. Use `-` for stdin
+
+Options:
+  -p, --playback                     Display solution on the terminal
+  -f, --frame-length <FRAME_LENGTH>  Playback frame length in milliseconds [default: 300]
+  -h, --help                         Print help
+  -V, --version                      Print version
+```
+
 ### Extras (additional fun factor)
 Additional feature `mapgen` will can generate more maps for an increased fun factor. Build with feature `mapgen` to create another binary `generate-maze`:
 
@@ -129,6 +144,20 @@ When developing, the program may also be run with
 You can build the developer documentation with 
 
     cargo doc
+
+### Code quality
+
+Code must be formatted with `rustfmt`:
+
+    rustfmt src/*.rs
+
+And quality checked with static analyzer `cargo clippy`:
+
+    cargo clippy
+
+An easy way to examine test coverage is to install additional cargo command with `cargo install cargo-llvm-cov` and then run
+
+    cargo llvm-cov --open
 
 ## License
 
