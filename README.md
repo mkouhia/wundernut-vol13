@@ -16,19 +16,36 @@ The problem is to find a way out of a maze while avoiding a moving dragon.
 
       cargo build --release
 
-  You will now find the executable in `./target/release/wundernut-vol13`, or if on Windows, `./target/release/wundernut-vol13.exe`. In following examples, replace program name with the correct path to the built executable, or copy the executable to a convenient location.
+  You will now find the executable in `./target/release/solve-maze`, or if on Windows, `./target/release/solve-maze.exe`. In following examples, replace program name with the correct path to the built executable, or copy the executable to a convenient location.
 
 - With the maze in some local file, solve the maze with
 
-      ./target/release/wundernut-vol13 <FILE>
+      solve-maze [OPTIONS] <FILE>
 
 - _Fun factor:_ solve and display the hero's journey in the maze:
 
-      ./target/release/wundernut-vol13 --playback <FILE>
+      solve-maze --playback <FILE>
+
+  [solve-maze-example1.webm](https://github.com/mkouhia/wundernut-vol13/assets/1469093/23a9fed2-088a-4c8b-b3c7-5357f388b910)
 
 If necessary, consult the program help in
 
-    ./target/release/wundernut-vol13 --help
+    solve-maze --help
+
+### Extras (additional fun factor)
+Additional feature `mapgen` will can generate more maps for an increased fun factor. Build with feature `mapgen` to create another binary `generate-maze`:
+
+      cargo build --features mapgen --release
+
+Then you can generate additional mazes with 
+
+    generate-maze [OPTIONS]
+
+To generate a maze and play back results, perform
+
+    generate-maze | solve-maze -p -
+
+  [generate-and-solve-maze.webm](https://github.com/mkouhia/wundernut-vol13/assets/1469093/cfd23422-a921-4882-8bae-b038b80e65e9)
 
 
 ## Implementation
@@ -53,6 +70,18 @@ The search for the optimal path starts at the hero location.
 7. All acceptable resulting states are pushed to the heap for evaluation.
 8. We loop over the possible states, taking more steps one by one until the goal is found.
 
+Hero back-steps are allowed, to enable solving of such situations, where the hero cannot always go forward:
+
+> ```
+> 🟫🟫🟫🟫🟫🟫
+> 🟫🏃🟩🟩🟫🟫
+> 🟫🟩🟫🟩🟫🟫
+> 🟫🟩🟩🐉🟩❎
+> 🟫🟫🟫🟫🟫🟫
+> ```
+> Optimal solution: hero takes either step to the right or down, dragon comes to meet, hero steps back and then continues around the circle in the opposite direction to the first step.
+
+This is implemented in the Dijkstra's algorithm, by having current best distance `dist` and best previous step to the node `prev` to be indexed by the hero position _and_ the dragon position. This increases the number of possible solutions quite heavily, but is required for these edge cases.
 
 ### Dragon movement
 
@@ -61,10 +90,17 @@ Once the maze has been set up, the shortest paths from one square to another doe
 Thus, we can pre-calculate the shortest paths from any square `u` to any other square `v` with [Floyd-Warshall algorithm](https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm#Path_reconstruction).
 Upon calculating the shortest paths, the previous steps on the path `u->v`are saved, and queried upon dragon movement.
 
-### General implementation notices
+**Special case**: If there is no viable path from the dragon position to the hero position, the dragon does not awake. It will remain sleeping in its current position.
+
+### General implementation notes
+- The algorithm is designed for small to medium sized, quite closed maps. Since back-steps for the hero are allowed, the number of possible solutions increases rapidly with the map size. For open maps, where back-steps for the hero are not required, reqular Dijkstra `dist` and `prev` with only hero position would be better.
+- Rust is selected as the implementation language to provide solutions efficiently. Current implementation is still single-threaded. Multi-threading can be implemented to improve solution times.
 - If the maze would have a square type with single access direction, that could be handled with directional edges.
 - Different terrain types could be handled by introducing edge weights.
-- For the problem solving algorithm, meeting a dragon and path to the goal not existing are equivalent: there is no feasible path to the end.
+- The underlying graph may be simplified by converting long passageways to just two nodes with longer edge in between. This would reduce solution time for the optimal path, but converting to hero/dragon steps requires more attention.
+- Non-rectangular grids, or other tile shapes (hexagonal, mixed shapes) can be implemented using the same graph-based approach. New map parsing methods would need to be introduced, and the `Point` struct revised.
+- For the problem solving algorithm, meeting a dragon and path to the goal not existing are equivalent: there is no feasible path to the end. The cases are differentiated by running the same algorithm without the dragon constraint. If a solution is found, then the dragon was guilty.
+    - Because this is a family friendly implementation, no playback is available for the cases that the dragon would slay the hero.
 
 ## Development
 
@@ -82,7 +118,7 @@ Build release version of the program with
 
 After this, you may run the compiled binary program with
 
-    ./target/release/wundernut-vol13
+    ./target/release/solve-maze
 
 When developing, the program may also be run with
 
