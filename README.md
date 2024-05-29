@@ -78,10 +78,14 @@ Once the maze has been set up, the shortest paths from one square to another doe
 Thus, we can pre-calculate the shortest paths from any square `u` to any other square `v` with [Floyd-Warshall algorithm](https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm#Path_reconstruction).
 Upon calculating the shortest paths, the previous steps on the path `u->v`are saved, and queried upon dragon movement.
 
+**Special case**: If there is no viable path from the dragon position to the hero position, the dragon does not awake. It will remain sleeping in its current position.
+
 ### General implementation notices
 - If the maze would have a square type with single access direction, that could be handled with directional edges.
 - Different terrain types could be handled by introducing edge weights.
-- For the problem solving algorithm, meeting a dragon and path to the goal not existing are equivalent: there is no feasible path to the end.
+- Non-rectangular grids, or other tile shapes (hexagonal, mixed shapes) can be implemented using the same graph-based approach. New map parsing methods would need to be introduced, and the `Point` struct revised.
+- For the problem solving algorithm, meeting a dragon and path to the goal not existing are equivalent: there is no feasible path to the end. The cases are differentiated by running the same algorithm without the dragon constraint. If a solution is found, then the dragon was guilty.
+    - Because this is a family friendly implementation, no playback is available for the cases that the dragon would slay the hero.
 
 ## Development
 
