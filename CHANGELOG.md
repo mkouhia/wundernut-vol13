@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2024-05-29
+
+### Added
+- Trim trailing whitespace from input rows; increase robustness.
+
 ## [0.2.0] - 2024-05-29
 
 ### Added
@@ -41,7 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dragon routing based on shortest path to current hero position.
 - Playback solution.
 
-[unreleased]: https://github.com/mkouhia/wundernut-vol13/compare/v0.2.0...HEAD
+[unreleased]: https://github.com/mkouhia/wundernut-vol13/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/mkouhia/wundernut-vol13/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/mkouhia/wundernut-vol13/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/mkouhia/wundernut-vol13/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/mkouhia/wundernut-vol13/compare/v0.1.0...v0.1.1
