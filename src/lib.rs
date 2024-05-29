@@ -51,7 +51,7 @@ use std::collections::BinaryHeap;
 use std::thread;
 use std::time::Duration;
 
-use anyhow::{anyhow, bail};
+use anyhow::anyhow;
 use itertools::Itertools;
 
 #[cfg(feature = "mapgen")]
@@ -293,6 +293,9 @@ impl Maze {
     /// Find the shortest path that the hero can take to reach the exit,
     /// without being caught by the dragon.
     ///
+    /// **Special case**: if the dragon does not have any viable path
+    /// to the hero, it does not move at all.
+    ///
     /// Employ [Dijkstra's algorithm][1], modified with simultaneous
     /// dragon movement. After each path evaluation, the dragon also
     /// moves. If dragon reaches the hero, the path is discarded.
@@ -300,39 +303,54 @@ impl Maze {
     /// # Returns
     /// Solution, with hero positions and dragon positions.
     ///
+    /// # Errors
+    /// Raises error, if the hero cannot avoid the dragon, or there is
+    /// no path from the hero position to the goal.
+    ///
     /// [1]: https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm
     pub fn solve(&self) -> anyhow::Result<MazeSolution> {
-        let states = self.solve_hero_shortest_path()?;
+        let dragon_prev: Vec<Vec<Option<usize>>> = self.graph.get_shortest_path_steps();
+        let states = self.solve_hero_shortest_path(&dragon_prev, true);
 
-        let (hero_positions, mut dragon_positions): (Vec<_>, Vec<_>) = states
-            .iter()
-            .map(|s| {
-                (
-                    self.graph.nodes[s.hero_node].clone(),
-                    self.graph.nodes[s.dragon_node].clone(),
-                )
+        if let Some(states) = states {
+            // Found an optimal pathway
+            let (hero_positions, mut dragon_positions): (Vec<_>, Vec<_>) = states
+                .iter()
+                .map(|s| {
+                    (
+                        self.graph.nodes[s.hero_node].clone(),
+                        self.graph.nodes[s.dragon_node].clone(),
+                    )
+                })
+                .unzip();
+
+            let ending_condition = match states.last() {
+                Some(State {
+                    steps: _,
+                    hero_node,
+                    dragon_node: _,
+                }) if *hero_node == self.goal => EndingCondition::GOAL,
+                _ => EndingCondition::FAIL,
+            };
+
+            // If hero reached their goal, remove ultimate dragon movement
+            if ending_condition == EndingCondition::GOAL {
+                dragon_positions.pop();
+            }
+
+            Ok(MazeSolution {
+                hero_positions,
+                dragon_positions,
+                ending_condition,
             })
-            .unzip();
-
-        let ending_condition = match states.last() {
-            Some(State {
-                steps: _,
-                hero_node,
-                dragon_node: _,
-            }) if *hero_node == self.goal => EndingCondition::GOAL,
-            _ => EndingCondition::FAIL,
-        };
-
-        // If hero reached their goal, remove ultimate dragon movement
-        if ending_condition == EndingCondition::GOAL {
-            dragon_positions.pop();
+        } else {
+            let states_relaxed = self.solve_hero_shortest_path(&dragon_prev, false);
+            if let Some(_states) = states_relaxed {
+                Err(anyhow!("The hero cannot avoid the dragon."))
+            } else {
+                Err(anyhow!("The maze does not have any path to the end."))
+            }
         }
-
-        Ok(MazeSolution {
-            hero_positions,
-            dragon_positions,
-            ending_condition,
-        })
     }
 
     /// Solve hero path with modified Dijkstra's algorithm
@@ -340,18 +358,25 @@ impl Maze {
     /// First, solve optimal dragon steps with Floyd-Warshall.
     /// Then, run Dijkstra's algorithm for hero.
     ///
-    /// ## Returns
-    /// Vec of [State] objects, which represent what had happened
-    /// under the hero`s journey, including the start and end.
-    /// Dragon movement after hero reaches the goal is included in the
-    /// last state.
+    /// ## Arguments
+    /// - `dragon_prev`: Previous moves for Floyd-Warshall path recreation,
+    ///   as received from [Graph::get_shortest_path_steps]
+    /// - `avoid_dragon`: The hero tries to avoid the dragon. If the
+    ///   maze cannot be solved with `avoid_dragon=True`, then with
+    ///   `avoid_dragon=False` we can check if the maze does not have
+    ///   any routes to the end, or if the dragon is just on the way.
     ///
-    /// # Errors
-    /// If no connection from the dragon position to the hero position
-    /// was found.
-    fn solve_hero_shortest_path(&self) -> anyhow::Result<Vec<State>> {
-        let dragon_prev: Vec<Vec<Option<usize>>> = self.graph.get_shortest_path_steps();
-
+    /// ## Returns
+    /// If the optimal route was found, Some Vec of [State] objects,
+    /// which represent what had happened under the hero`s journey,
+    /// including the start and end. Dragon movement after hero reaches
+    /// the goal is included in the last state.
+    /// If no route cannot be found, returns None.
+    fn solve_hero_shortest_path(
+        &self,
+        dragon_prev: &[Vec<Option<usize>>],
+        avoid_dragon: bool,
+    ) -> Option<Vec<State>> {
         // Shortest distance to node: (hero pos, wrt. dragon pos)
         let mut dist: Vec<Vec<Option<usize>>> = Vec::new();
         let mut prev: Vec<Vec<Option<State>>> = Vec::new();
@@ -384,11 +409,11 @@ impl Maze {
                 let next = State {
                     hero_node: v,
                     steps: state.steps + 1,
-                    dragon_node: self.dragon_step_inner(v, state.dragon_node, &dragon_prev)?,
+                    dragon_node: self.dragon_step_inner(v, state.dragon_node, dragon_prev),
                 };
 
                 // Do not allow paths where dragon meets hero
-                if next.dragon_node == next.hero_node {
+                if avoid_dragon && (next.dragon_node == next.hero_node) {
                     continue;
                 }
 
@@ -401,18 +426,18 @@ impl Maze {
         }
 
         if prev[outer_state.hero_node][outer_state.dragon_node].is_none() {
-            bail!("Hero cannot reach the goal: either no path to the end or the hero cannot avoid the dragon.")
-        }
+            None
+        } else {
+            // Transfer prev statements recursively to the beginning
+            let mut path = vec![outer_state];
+            while let Some(state) = prev[outer_state.hero_node][outer_state.dragon_node] {
+                path.push(state);
+                outer_state = state;
+            }
+            path.reverse();
 
-        // Transfer prev statements recursively to the beginning
-        let mut path = vec![outer_state];
-        while let Some(state) = prev[outer_state.hero_node][outer_state.dragon_node] {
-            path.push(state);
-            outer_state = state;
+            Some(path)
         }
-        path.reverse();
-
-        Ok(path)
     }
 
     /// Take step on the shortest path from the dragon to the hero
@@ -420,14 +445,16 @@ impl Maze {
     /// Actually, find the penultimate position on the path from the hero
     /// position to the dragon position, utilizing Floyd-Warshall path
     /// reconstruction.
+    ///
+    /// If there is no connection from the dragon position to the hero
+    /// position, do nothing.
     fn dragon_step_inner(
         &self,
         hero_node: usize,
         dragon_node: usize,
         dragon_prev: &[Vec<Option<usize>>],
-    ) -> anyhow::Result<usize> {
-        dragon_prev[hero_node][dragon_node]
-            .ok_or_else(|| anyhow!("No connection from dragon position to hero position"))
+    ) -> usize {
+        dragon_prev[hero_node][dragon_node].unwrap_or(dragon_node)
     }
 
     /// Print solution to console, step by step
@@ -727,7 +754,9 @@ mod tests {
             .trim();
         let maze = Maze::parse_emojis(emojis).unwrap();
         let solution = maze.solve();
-        assert!(solution.is_err())
+        assert!(solution.is_err_and(|e| e
+            .to_string()
+            .contains("The maze does not have any path to the end.")))
     }
 
     #[test]
@@ -745,6 +774,24 @@ mod tests {
             .trim();
         let maze = Maze::parse_emojis(emojis).unwrap();
         let solution = maze.solve();
-        assert!(solution.is_err())
+        assert!(solution.is_err_and(|e| e.to_string().contains("The hero cannot avoid the dragon.")))
+    }
+
+    #[test]
+    fn dragon_cannot_reach_hero() {
+        let emojis = "
+🟫🏃🟫🟫🟫🟫🟫
+🟫🟩🟩🟩🟩🟩🟫
+🟫🟫🟫🟫🟫🟩🟫
+🟫🟩🟩🟩🟫🟩🟫
+🟫🐉🟩🟩🟫🟩🟫
+🟫🟩🟩🟩🟫🟩🟫
+🟫🟫🟫🟫🟫🟩🟫
+🟫🟩🟩🟩🟩🟩🟫
+🟫❎🟫🟫🟫🟫🟫"
+            .trim();
+        let maze = Maze::parse_emojis(emojis).unwrap();
+        let solution = maze.solve().unwrap();
+        assert_eq!(solution.hero_positions.len() - 1, 16);
     }
 }

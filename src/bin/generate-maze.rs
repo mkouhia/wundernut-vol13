@@ -25,8 +25,8 @@ struct Args {
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    let gen = MazeGenerator::default();
-    let res: Vec<Vec<char>> = gen.generate_maze(args.height, args.width, args.seed);
+    let mut gen = MazeGenerator::new(args.seed);
+    let res: Vec<Vec<char>> = gen.generate_maze(args.height, args.width);
     println!("{}", res.iter().map(|row| row.iter().join("")).join("\n"));
     Ok(())
 }
